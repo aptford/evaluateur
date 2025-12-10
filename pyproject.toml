@@ -1,0 +1,28 @@
+[project]
+name = "evaluator"
+version = "0.1.0"
+description = "synthetic evals for agents"
+readme = "README.md"
+authors = [{ name = "Sasha Aptlin", email = "sasha@aptford.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "dspy>=3.0.4",
+    "instructor>=1.13.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.9,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[project.urls]
+homepage = "https://github.com/aptford/evaluator"
+repository = "https://github.com/aptford/evaluator"
+documentation = "https://github.com/aptford/evaluator/blob/main/README.md"
