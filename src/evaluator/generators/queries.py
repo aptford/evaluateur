@@ -26,9 +26,11 @@ class QueryMode(str, Enum):
 
 
 class QueryGenerator(Protocol):
-    """Protocol for query generators."""
+    """Protocol for async query generators."""
 
-    def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]: ...
+    async def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+        """Generate queries asynchronously from a list of tuples."""
+        ...
 
 
 class DSpyOptimizer(Protocol):
@@ -43,25 +45,25 @@ class DSpyOptimizer(Protocol):
         trainset: Sequence[Any] | None = None,
         valset: Sequence[Any] | None = None,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> Any:
+        ...
 
 
 class InstructorQueryGenerator:
-    """Use Instructor directly to synthesize queries from tuples."""
+    """Use Instructor directly to synthesize queries from tuples asynchronously."""
 
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
-    def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+    async def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+        """Generate queries asynchronously using Instructor."""
         client = self._client.instructor_client
         log.info("InstructorQueryGenerator: generating queries for %d tuples", len(tuples))
 
         class QueryListModel(BaseModel):
             queries: list[GeneratedQuery]
 
-        tuple_descriptions = [
-            f"- {t.values}" for t in tuples
-        ]
+        tuple_descriptions = [f"- {t.values}" for t in tuples]
 
         system_message = (
             "You create realistic user queries for evaluating an AI system. "
@@ -76,7 +78,7 @@ class InstructorQueryGenerator:
         )
         log.debug("InstructorQueryGenerator prompt:\n%s", user_message)
 
-        result: QueryListModel = client.chat.completions.create(  # type: ignore[assignment]
+        result: QueryListModel = await client.chat.completions.create(
             model=self._client.model_name,
             response_model=QueryListModel,
             messages=[
@@ -93,6 +95,7 @@ class _TupleToQuerySignature:
     """DSPy signature for converting a tuple into a query."""
 
     if dspy is not None:  # pragma: no branch
+
         class TupleToQuery(dspy.Signature):  # type: ignore[valid-type]
             """Convert a structured tuple into a natural language query."""
 
@@ -102,7 +105,11 @@ class _TupleToQuerySignature:
 
 
 class DSpyQueryGenerator:
-    """Use DSPy to turn tuples into queries, optionally with optimization."""
+    """Use DSPy to turn tuples into queries, optionally with optimization.
+
+    Note: DSPy module calls are synchronous internally, but the generate method
+    is async for interface consistency with other generators.
+    """
 
     def __init__(
         self,
@@ -135,9 +142,6 @@ class DSpyQueryGenerator:
             )
             log.debug("DSpyQueryGenerator: custom optimizer compilation complete")
         elif optimize:
-            # Provide a sane default optimizer while still allowing callers to
-            # plug in their own teleprompters. Metric and data are delegated
-            # to the caller via ``trainset``/``valset`` when available.
             log.info("DSpyQueryGenerator: compiling with default MIPROv2 optimizer")
             try:
                 default_optimizer = dspy.MIPROv2(  # type: ignore[attr-defined]
@@ -151,11 +155,11 @@ class DSpyQueryGenerator:
                 )
                 log.debug("DSpyQueryGenerator: default optimizer compilation complete")
             except Exception:
-                # If default optimisation fails, fall back to the base module.
                 log.warning("DSpyQueryGenerator: default optimizer failed, using base module")
                 self._compiled_module = None
 
-    def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+    async def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+        """Generate queries using DSPy (sync calls wrapped in async interface)."""
         results: list[GeneratedQuery] = []
         module = self._compiled_module or self._module
         using_compiled = self._compiled_module is not None
@@ -178,18 +182,19 @@ class DSpyQueryGenerator:
 class HybridQueryGenerator:
     """Hybrid strategy: Instructor drafts, DSPy refines.
 
-    First uses Instructor to generate baseline queries, then (if DSPy is
-    available) lets DSPy rewrite or enrich them. If DSPy is not installed this
-    gracefully falls back to Instructor-only behaviour.
+    First uses Instructor to generate baseline queries asynchronously, then
+    (if DSPy is available) lets DSPy rewrite or enrich them. If DSPy is not
+    installed this gracefully falls back to Instructor-only behaviour.
     """
 
     def __init__(self, client: LLMClient) -> None:
         self._client = client
         self._instructor_gen = InstructorQueryGenerator(client)
 
-    def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+    async def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
+        """Generate and refine queries asynchronously."""
         log.info("HybridQueryGenerator: generating base queries with Instructor")
-        base_queries = self._instructor_gen.generate(tuples, context)
+        base_queries = await self._instructor_gen.generate(tuples, context)
 
         if dspy is None or self._client.dspy_lm is None:
             log.debug("HybridQueryGenerator: DSPy unavailable, returning base queries")
@@ -222,4 +227,3 @@ class HybridQueryGenerator:
 
         log.debug("HybridQueryGenerator: refinement complete, %d queries", len(refined))
         return refined
-

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+from collections.abc import AsyncIterator
 from enum import Enum
 from typing import Protocol, TypeVar
 
@@ -25,22 +26,26 @@ class TupleStrategy(str, Enum):
 
 
 class TupleGenerator(Protocol[ModelT]):
-    """Protocol for tuple generators."""
+    """Protocol for async tuple generators that yield tuples one at a time."""
 
-    def generate(self, options: BaseModel, count: int) -> list[GeneratedTuple[ModelT]]: ...
+    def generate(self, options: BaseModel, count: int) -> AsyncIterator[GeneratedTuple[ModelT]]:
+        """Generate tuples asynchronously, yielding one at a time."""
+        ...
 
 
 class CrossProductTupleGenerator:
-    """Generate tuples via cross product, then (optionally) filter with the LLM.
+    """Generate tuples via cross product as an async iterator.
 
-    This mirrors the \"cross product then filter\" approach from Hamel Husain's
+    This mirrors the "cross product then filter" approach from Hamel Husain's
     FAQ: it guarantees coverage of the dimension space at the cost of volume.
+    Yields tuples one at a time for streaming consumption.
     """
 
     def __init__(self, client: LLMClient | None = None) -> None:
         self._client = client
 
-    def generate(self, options: BaseModel, count: int) -> list[GeneratedTuple[ModelT]]:
+    async def generate(self, options: BaseModel, count: int) -> AsyncIterator[GeneratedTuple[ModelT]]:
+        """Yield tuples one at a time from the cross product."""
         field_names = list(type(options).model_fields.keys())
         value_lists: list[list[ScalarValue]] = []
 
@@ -58,35 +63,28 @@ class CrossProductTupleGenerator:
             len(field_names),
         )
 
-        # If we have more combinations than requested, we either sample or use
-        # the LLM (when available) to pick a diverse subset. For now we keep it
-        # simple and take the first N; the Evaluator can be extended later to
-        # support more advanced selection strategies.
         selected = all_combinations[:count] if count > 0 else all_combinations
         log.debug("CrossProductTupleGenerator: selected %d tuples", len(selected))
 
-        tuples = [
-            GeneratedTuple(
+        for combo in selected:
+            yield GeneratedTuple(
                 values={name: value for name, value in zip(field_names, combo)}
             )
-            for combo in selected
-        ]
-
-        return tuples
 
 
 class DirectLLMTupleGenerator:
-    """Generate tuples directly with Instructor.
+    """Generate tuples directly with Instructor as an async iterator.
 
     This uses the LLM to propose realistic combinations instead of enumerating
     all possibilities. It tends to produce more natural data but may miss some
-    edge cases.
+    edge cases. Yields tuples one at a time after the LLM response is received.
     """
 
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
-    def generate(self, options: BaseModel, count: int) -> list[GeneratedTuple[ModelT]]:
+    async def generate(self, options: BaseModel, count: int) -> AsyncIterator[GeneratedTuple[ModelT]]:
+        """Yield tuples one at a time after fetching from LLM."""
         client = self._client.instructor_client
         log.info("DirectLLMTupleGenerator: requesting ~%d tuples from LLM", count)
 
@@ -120,7 +118,7 @@ class DirectLLMTupleGenerator:
         class TupleListModel(BaseModel):
             tuples: list[FlatTuple]  # type: ignore[valid-type]
 
-        result: TupleListModel = client.chat.completions.create(  # type: ignore[assignment]
+        result: TupleListModel = await client.chat.completions.create(
             model=self._client.model_name,
             response_model=TupleListModel,
             messages=[
@@ -130,6 +128,5 @@ class DirectLLMTupleGenerator:
         )
         log.debug("DirectLLMTupleGenerator: received %d tuples", len(result.tuples))
 
-        return [
-            GeneratedTuple(values=t.model_dump()) for t in result.tuples
-        ]
+        for t in result.tuples:
+            yield GeneratedTuple(values=t.model_dump())

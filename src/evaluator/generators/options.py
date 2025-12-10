@@ -9,7 +9,7 @@ from evaluator.types import ModelT, create_options_model, is_iterator_field
 
 
 class OptionsGenerator:
-    """Generate discrete options for each field of a query model."""
+    """Generate discrete options for each field of a query model asynchronously."""
 
     def __init__(self, client: LLMClient) -> None:
         self._client = client
@@ -18,7 +18,6 @@ class OptionsGenerator:
         self, original_model: Type[BaseModel], options_model: Type[BaseModel]
     ) -> Type[BaseModel]:
         """Create a Pydantic model for Instructor to populate options."""
-
         fields: dict[str, tuple[Any, Any]] = {}
 
         for name, field in options_model.model_fields.items():
@@ -47,7 +46,7 @@ class OptionsGenerator:
             f"{options_model.__name__}Response", __base__=BaseModel, **fields
         )
 
-    def generate_options(
+    async def generate_options(
         self,
         model: Type[ModelT],
         *,
@@ -60,7 +59,6 @@ class OptionsGenerator:
         Fields that are already iterables (lists, tuples, etc.) are preserved
         with their existing types.
         """
-
         options_model = create_options_model(model)
         response_model = self._build_response_model(model, options_model)
 
@@ -87,7 +85,7 @@ class OptionsGenerator:
 
         client = self._client.instructor_client
 
-        result: BaseModel = client.chat.completions.create(  # type: ignore[assignment]
+        result: BaseModel = await client.chat.completions.create(
             model=self._client.model_name,
             response_model=response_model,
             messages=[
