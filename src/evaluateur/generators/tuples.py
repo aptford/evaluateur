@@ -8,9 +8,9 @@ from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, create_model
 
-from evaluator.client import LLMClient
-from evaluator.models import GeneratedTuple
-from evaluator.types import ScalarValue
+from evaluateur.client import LLMClient
+from evaluateur.models import GeneratedTuple
+from evaluateur.types import ScalarValue
 
 log = logging.getLogger(__name__)
 

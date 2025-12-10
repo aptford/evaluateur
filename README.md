@@ -1,4 +1,4 @@
-## Evaluator
+## Evaluateur
 
 Synthetic evaluation helper for LLM applications, built around the
 **dimensions → tuples → queries** flow described in [Hamel Husain's FAQ](https://hamel.dev/blog/posts/evals-faq/what-is-the-best-approach-for-generating-synthetic-data.html).
@@ -8,7 +8,7 @@ Synthetic evaluation helper for LLM applications, built around the
 The project is packaged as a normal Python library. With `uv`:
 
 ```bash
-uv add evaluator
+uv add evaluateur
 ```
 
 ### Basic usage
@@ -19,7 +19,7 @@ space, then use the `Evaluator` to generate options and queries:
 ```python
 from pydantic import BaseModel, Field
 
-from evaluator import Evaluator, QueryMode, TupleStrategy
+from evaluateur import Evaluator, QueryMode, TupleStrategy
 
 
 class Query(BaseModel):

@@ -7,21 +7,21 @@ from typing import Any, Sequence, Type, TypeVar
 
 from pydantic import BaseModel
 
-from evaluator.client import LLMClient
-from evaluator.generators import OptionsGenerator, QueryMode, TupleStrategy
-from evaluator.generators.queries import (
+from evaluateur.client import LLMClient
+from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
+from evaluateur.generators.queries import (
     DSpyOptimizer,
     DSpyQueryGenerator,
     HybridQueryGenerator,
     InstructorQueryGenerator,
     QueryGenerator,
 )
-from evaluator.generators.tuples import (
+from evaluateur.generators.tuples import (
     CrossProductTupleGenerator,
     DirectLLMTupleGenerator,
     TupleGenerator,
 )
-from evaluator.models import EvaluatorOutput, GeneratedQuery, GeneratedTuple
+from evaluateur.models import EvaluatorOutput, GeneratedQuery, GeneratedTuple
 
 log = logging.getLogger(__name__)
 

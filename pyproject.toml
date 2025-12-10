@@ -1,5 +1,5 @@
 [project]
-name = "evaluator"
+name = "evaluateur"
 version = "0.1.0"
 description = "synthetic evals for agents"
 readme = "README.md"
@@ -29,6 +29,6 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [project.urls]
-homepage = "https://github.com/aptford/evaluator"
-repository = "https://github.com/aptford/evaluator"
-documentation = "https://github.com/aptford/evaluator/blob/main/README.md"
+homepage = "https://github.com/aptford/evaluateur"
+repository = "https://github.com/aptford/evaluateur"
+documentation = "https://github.com/aptford/evaluateur/blob/main/README.md"

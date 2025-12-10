@@ -4,7 +4,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
-from evaluator.types import ScalarValue
+from evaluateur.types import ScalarValue
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)

@@ -4,8 +4,8 @@ from typing import Any, Type
 
 from pydantic import BaseModel, Field, create_model
 
-from evaluator.client import LLMClient
-from evaluator.types import ModelT, create_options_model, is_iterator_field
+from evaluateur.client import LLMClient
+from evaluateur.types import ModelT, create_options_model, is_iterator_field
 
 
 class OptionsGenerator:

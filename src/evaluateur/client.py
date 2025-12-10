@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - optional dependency at runtime
     dspy = None  # type: ignore[assignment]
 
 
-DEFAULT_MODEL_NAME = os.getenv("EVALUATOR_MODEL_NAME", "gpt-4o-mini")
+DEFAULT_MODEL_NAME = os.getenv("EVALUATEUR_MODEL_NAME", "gpt-4o-mini")
 
 
 @dataclass
@@ -72,7 +72,7 @@ class LLMClient:
         provider
             The LLM provider to use (e.g., "openai", "anthropic").
         model_name
-            The model name to use. Defaults to ``EVALUATOR_MODEL_NAME`` env var
+            The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
             or "gpt-4o-mini".
         dspy_lm
             Optional pre-configured DSPy language model. If not provided and
@@ -126,7 +126,7 @@ class LLMClient:
         openai_client
             An AsyncOpenAI-compatible client instance.
         model_name
-            The model name to use. Defaults to ``EVALUATOR_MODEL_NAME`` env var
+            The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
             or "gpt-4o-mini".
         provider
             Provider identifier for metadata purposes. Defaults to "openai".
@@ -188,7 +188,7 @@ class LLMClient:
             ``instructor.from_openai(AsyncOpenAI())``.
         model_name
             The model name for metadata purposes. Defaults to
-            ``EVALUATOR_MODEL_NAME`` env var or "gpt-4o-mini".
+            ``EVALUATEUR_MODEL_NAME`` env var or "gpt-4o-mini".
         provider
             Provider identifier for metadata purposes. Defaults to "openai".
         dspy_lm

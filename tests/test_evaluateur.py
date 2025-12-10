@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel, Field
 
-from evaluator import Evaluator, GeneratedTuple, TupleStrategy
-from evaluator.generators.tuples import CrossProductTupleGenerator
-from evaluator.types import create_options_model, is_iterator_field
+from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
+from evaluateur.generators.tuples import CrossProductTupleGenerator
+from evaluateur.types import create_options_model, is_iterator_field
 
 
 class Query(BaseModel):

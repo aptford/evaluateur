@@ -6,8 +6,8 @@ from typing import Any, Protocol, Sequence
 
 from pydantic import BaseModel
 
-from evaluator.client import LLMClient
-from evaluator.models import GeneratedQuery, GeneratedTuple
+from evaluateur.client import LLMClient
+from evaluateur.models import GeneratedQuery, GeneratedTuple
 
 log = logging.getLogger(__name__)
 
