@@ -9,56 +9,68 @@ from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
-from evaluateur.generators.queries import (
-    DSpyOptimizer,
-    DSpyQueryGenerator,
-    HybridQueryGenerator,
-    InstructorQueryGenerator,
-    QueryGenerator,
-)
+from evaluateur.generators.query.context import compose_context
+from evaluateur.goals import GoalSpec
+from evaluateur.generators.queries import DSpyOptimizer, InstructorQueryGenerator, QueryGenerator
 from evaluateur.generators.tuples import (
     CrossProductTupleGenerator,
     DirectLLMTupleGenerator,
     TupleGenerator,
 )
 from evaluateur.models import EvaluatorOutput, GeneratedQuery, GeneratedTuple
+from evaluateur.optimizers import GoalGuidedQueryOptimizer, JudgeBackend
 
 log = logging.getLogger(__name__)
 
 QueryModelT = TypeVar("QueryModelT", bound=BaseModel)
 
 
-@dataclass
+@dataclass(frozen=True)
+class TupleConfig:
+    """Configuration for tuple generation."""
+
+    strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT
+    count: int = 20
+
+
+@dataclass(frozen=True)
+class DSpyConfig:
+    """Configuration for DSPy-based query generation."""
+
+    optimize: bool = False
+    optimizer: DSpyOptimizer | None = None
+    trainset: Sequence[Any] | None = None
+    valset: Sequence[Any] | None = None
+
+    # Goal-guided compile-time optimization (when no explicit optimizer is provided).
+    goal_guided: bool = False
+    judge_backend: JudgeBackend = JudgeBackend.LLM
+
+
+@dataclass(frozen=True)
+class QueryConfig:
+    """Configuration for query generation."""
+
+    mode: QueryMode = QueryMode.INSTRUCTOR
+    dspy: DSpyConfig | None = None
+
+
 class Evaluator:
-    """Async synthetic query evaluator following the dimensions -> tuples -> queries flow.
+    """Async synthetic evaluation helper following the dimensions → tuples → queries flow.
 
-    The evaluator is parameterised by a Pydantic ``BaseModel`` that describes the
-    dimensions of a query (e.g. payer, age, complexity, geography). It can:
-
-    - Generate *options* for each dimension using Instructor (async)
-    - Turn those options into tuples via cross-product or direct LLM generation (async iterator)
-    - Convert tuples into natural language queries using Instructor, DSPy, or a hybrid (async)
-
-    All methods are async by default for optimal I/O performance with LLM calls.
+    The evaluator is parameterized by a Pydantic model that describes the
+    dimensions of a query (e.g. payer, age, complexity, geography).
     """
-
-    model: Type[QueryModelT]
-    client: LLMClient
-    context: str = ""
 
     def __init__(
         self,
         model: Type[QueryModelT],
+        *,
         client: LLMClient | None = None,
         context: str = "",
-        provider: str = "openai",
-        model_name: str | None = "gpt-4o-mini",
     ) -> None:
         self.model = model
-        self.client = client or LLMClient.from_env(
-            provider=provider,
-            model_name=model_name,
-        )
+        self.client = client or LLMClient.from_env()
         self.context = context
         self._options_generator = OptionsGenerator(self.client)
         log.debug(
@@ -68,10 +80,10 @@ class Evaluator:
             self.client.model_name,
         )
 
-    async def generate_options(
+    async def options(
         self,
         instructions: str | None = None,
-        count_per_field: int = 5,
+        n: int = 5,
     ) -> BaseModel:
         """Generate an options ``BaseModel`` from the configured query model.
 
@@ -79,14 +91,14 @@ class Evaluator:
         options. Iterator fields (lists, tuples, etc.) are preserved.
         """
         log.info(
-            "Generating options for %s (count_per_field=%d)",
+            "Generating options for %s (n=%d)",
             self.model.__name__,
-            count_per_field,
+            n,
         )
         result = await self._options_generator.generate_options(
             self.model,
             instructions=instructions,
-            count_per_field=count_per_field,
+            count_per_field=n,
         )
         log.debug("Generated options: %s", result)
         return result
@@ -107,145 +119,183 @@ class Evaluator:
         dspy_optimizer: DSpyOptimizer | None,
         dspy_trainset: Sequence[Any] | None,
         dspy_valset: Sequence[Any] | None,
+        goal_spec: GoalSpec | None,
+        goal_prompt: str | None,
     ) -> QueryGenerator:
         """Build a query generator based on the specified mode."""
         if mode == QueryMode.INSTRUCTOR:
             return InstructorQueryGenerator(self.client)
         if mode == QueryMode.DSPY:
+            from evaluateur.generators.queries import DSpyQueryGenerator
+
             return DSpyQueryGenerator(
                 self.client,
                 optimize=optimize_dspy,
                 optimizer=dspy_optimizer,
                 trainset=dspy_trainset,
                 valset=dspy_valset,
+                goal_spec=goal_spec,
+                goal_prompt=goal_prompt,
             )
         if mode == QueryMode.HYBRID:
-            return HybridQueryGenerator(self.client)
+            from evaluateur.generators.queries import HybridQueryGenerator
+
+            return HybridQueryGenerator(self.client, goal_spec=goal_spec, goal_prompt=goal_prompt)
         raise ValueError(f"Unsupported query mode: {mode}")
 
     async def _ensure_options(self, maybe_options: BaseModel | None) -> BaseModel:
         """Ensure options are available, generating them if not provided."""
         if maybe_options is not None:
             return maybe_options
-        return await self.generate_options()
+        return await self.options()
 
-    async def generate_tuples(
+    async def tuples(
         self,
         options: BaseModel | None = None,
         *,
-        strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT,
-        count: int = 20,
+        config: TupleConfig = TupleConfig(),
     ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples as an async iterator, yielding one at a time.
 
-        This is the public API for generating tuples from options. Each tuple
-        represents a combination of dimension values that can be used to
-        generate evaluation queries.
-
-        Parameters
-        ----------
-        options
-            A model instance whose fields are iterables of concrete values. If
-            omitted, the evaluator will first generate options automatically
-            using Instructor.
-        strategy
-            How to generate tuples from the options (cross product or direct LLM).
-        count
-            Target number of tuples to generate.
-
-        Yields
-        ------
-        GeneratedTuple
-            Individual tuples, one at a time, for streaming consumption.
+        If `options` is omitted, the evaluator will first generate options.
         """
         log.info(
             "Generating tuples: strategy=%s, count=%d",
-            strategy.value,
-            count,
+            config.strategy.value,
+            config.count,
         )
 
         options_instance = await self._ensure_options(options)
         log.debug("Using options: %s", options_instance)
 
-        tuple_gen = self._build_tuple_generator(strategy)
+        tuple_gen = self._build_tuple_generator(config.strategy)
         generated_count = 0
 
-        async for t in tuple_gen.generate(options_instance, count):
+        async for t in tuple_gen.generate(options_instance, config.count):
             generated_count += 1
             yield t
 
         log.info("Generated %d tuples", generated_count)
 
-    async def generate_queries(
+    async def _normalize_goals(self, goals: GoalSpec | str | None) -> tuple[GoalSpec | None, str | None]:
+        if goals is None:
+            return None, None
+        if isinstance(goals, str):
+            spec = await GoalSpec.from_text(self.client, goals)
+        elif isinstance(goals, GoalSpec):
+            spec = goals
+        else:  # pragma: no cover - defensive
+            raise TypeError("goals must be a GoalSpec, a string, or None")
+
+        if spec.is_empty():
+            return None, None
+        return spec, spec.render_prompt()
+
+    def _resolve_dspy_optimizer(
         self,
-        options: BaseModel | None = None,
+        dspy: DSpyConfig,
         *,
-        mode: QueryMode = QueryMode.INSTRUCTOR,
-        tuple_strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT,
-        tuple_count: int = 20,
-        optimize_dspy: bool = False,
-        dspy_optimizer: DSpyOptimizer | None = None,
-        dspy_trainset: Sequence[Any] | None = None,
-        dspy_valset: Sequence[Any] | None = None,
-    ) -> EvaluatorOutput:
-        """Generate natural language queries based on the model and options.
+        mode: QueryMode,
+        goal_spec: GoalSpec | None,
+        goal_prompt: str | None,
+    ) -> tuple[DSpyOptimizer | None, GoalSpec | None, str | None]:
+        resolved_goal_spec = goal_spec
+        resolved_goal_prompt = goal_prompt
+        resolved_optimizer = dspy.optimizer
 
-        Parameters
-        ----------
-        options
-            A model instance whose fields are iterables of concrete values. If
-            omitted, the evaluator will first generate options automatically
-            using Instructor.
-        mode
-            How to turn tuples into queries (Instructor, DSPy, or hybrid).
-        tuple_strategy
-            How to generate tuples from the options (cross product or direct LLM).
-        tuple_count
-            Target number of tuples to generate.
-        optimize_dspy
-            Whether to enable default DSPy optimisation in DSPy-based modes.
-        dspy_optimizer
-            Optional custom DSPy optimizer / teleprompter. Any object with a
-            ``compile(student, trainset, valset, **kwargs)`` method can be
-            used, for example ``dspy.MIPROv2`` or ``dspy.BootstrapFewShot``.
-        dspy_trainset
-            Optional training set passed to the optimiser's ``compile``.
-        dspy_valset
-            Optional validation set passed to the optimiser's ``compile``.
-
-        Returns
-        -------
-        EvaluatorOutput
-            Full structured output containing tuples, queries, and metadata.
-        """
-        log.info(
-            "Generating queries: mode=%s, tuple_strategy=%s, tuple_count=%d",
-            mode.value,
-            tuple_strategy.value,
-            tuple_count,
-        )
-
-        options_instance = await self._ensure_options(options)
-        log.debug("Using options: %s", options_instance)
-
-        # Collect tuples from async iterator
-        tuples: list[GeneratedTuple] = [
-            t async for t in self.generate_tuples(
-                options_instance,
-                strategy=tuple_strategy,
-                count=tuple_count,
+        if (
+            resolved_optimizer is None
+            and dspy.goal_guided
+            and mode in (QueryMode.DSPY, QueryMode.HYBRID)
+        ):
+            if resolved_goal_spec is None:
+                resolved_goal_spec = GoalSpec(title="Goal-guided (no explicit goals provided)")
+                resolved_goal_prompt = resolved_goal_spec.render_prompt()
+            resolved_optimizer = GoalGuidedQueryOptimizer(
+                goal_spec=resolved_goal_spec,
+                judge_backend=dspy.judge_backend,
             )
-        ]
-        log.info("Generated %d tuples", len(tuples))
 
-        query_gen = self._build_query_generator(
-            mode,
-            optimize_dspy=optimize_dspy,
-            dspy_optimizer=dspy_optimizer,
-            dspy_trainset=dspy_trainset,
-            dspy_valset=dspy_valset,
+        return resolved_optimizer, resolved_goal_spec, resolved_goal_prompt
+
+    async def _collect_tuples(
+        self, tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple]
+    ) -> list[GeneratedTuple]:
+        if hasattr(tuples, "__aiter__"):
+            return [t async for t in tuples]  # type: ignore[misc]
+        return list(tuples)
+
+    async def queries(
+        self,
+        *,
+        tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
+        config: QueryConfig = QueryConfig(),
+        goals: GoalSpec | str | None = None,
+    ) -> EvaluatorOutput:
+        log.info(
+            "Generating queries: mode=%s, tuple_count=%s",
+            config.mode.value,
+            "streaming" if hasattr(tuples, "__aiter__") else len(tuples),  # type: ignore[arg-type]
         )
-        queries: list[GeneratedQuery] = await query_gen.generate(tuples, self.context)
+
+        goal_spec, goal_prompt = await self._normalize_goals(goals)
+
+        dspy_cfg = config.dspy or DSpyConfig()
+        resolved_optimizer, goal_spec, goal_prompt = self._resolve_dspy_optimizer(
+            dspy_cfg,
+            mode=config.mode,
+            goal_spec=goal_spec,
+            goal_prompt=goal_prompt,
+        )
+
+        tuples_list = await self._collect_tuples(tuples)
+        log.info("Collected %d tuples", len(tuples_list))
+
+        query_gen: QueryGenerator
+        if config.mode == QueryMode.INSTRUCTOR:
+            query_gen = InstructorQueryGenerator(self.client)
+            effective_context = compose_context(self.context, goal_prompt)
+            queries = await query_gen.generate(tuples_list, effective_context)
+        elif config.mode == QueryMode.DSPY:
+            from evaluateur.generators.queries import DSpyQueryGenerator
+
+            query_gen = DSpyQueryGenerator(
+                self.client,
+                optimize=dspy_cfg.optimize,
+                optimizer=resolved_optimizer,
+                trainset=dspy_cfg.trainset,
+                valset=dspy_cfg.valset,
+                goal_spec=goal_spec,
+                goal_prompt=goal_prompt,
+            )
+            queries = await query_gen.generate(tuples_list, self.context)
+        elif config.mode == QueryMode.HYBRID:
+            from evaluateur.generators.queries import HybridQueryGenerator
+
+            query_gen = HybridQueryGenerator(self.client, goal_spec=goal_spec, goal_prompt=goal_prompt)
+            queries = await query_gen.generate(tuples_list, self.context)
+        else:  # pragma: no cover - defensive
+            raise ValueError(f"Unsupported query mode: {config.mode}")
+
         log.info("Generated %d queries", len(queries))
 
-        return EvaluatorOutput(tuples=tuples, queries=queries, metadata={})
+        metadata: dict[str, Any] = {}
+        if goal_spec is not None and not goal_spec.is_empty():
+            metadata["query_goals"] = goal_spec.to_metadata()
+        metadata["goal_guided"] = bool(goal_prompt)
+        metadata["mode"] = config.mode.value
+        return EvaluatorOutput(tuples=tuples_list, queries=queries, metadata=metadata)
+
+    async def run(
+        self,
+        *,
+        options: BaseModel | None = None,
+        tuple_config: TupleConfig = TupleConfig(),
+        query_config: QueryConfig = QueryConfig(),
+        goals: GoalSpec | str | None = None,
+    ) -> EvaluatorOutput:
+        """Convenience wrapper: options → tuples → queries."""
+
+        options_instance = await self._ensure_options(options)
+        tuple_iter = self.tuples(options_instance, config=tuple_config)
+        return await self.queries(tuples=tuple_iter, config=query_config, goals=goals)

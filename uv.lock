@@ -737,10 +737,14 @@ name = "evaluateur"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "dspy" },
     { name = "instructor" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+]
+
+[package.optional-dependencies]
+dspy = [
+    { name = "dspy" },
 ]
 
 [package.dev-dependencies]
@@ -752,11 +756,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dspy", specifier = ">=3.0.4" },
+    { name = "dspy", marker = "extra == 'dspy'", specifier = ">=3.0.4" },
     { name = "instructor", specifier = ">=1.13.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
+provides-extras = ["dspy"]
 
 [package.metadata.requires-dev]
 dev = [

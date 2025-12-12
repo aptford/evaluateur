@@ -7,10 +7,14 @@ authors = [{ name = "Sasha Aptlin", email = "sasha@aptford.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "dspy>=3.0.4",
     "instructor>=1.13.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
+]
+
+[project.optional-dependencies]
+dspy = [
+    "dspy>=3.0.4",
 ]
 
 [build-system]

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import builtins
+import importlib
+import sys
 from typing import List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
+from evaluateur import Evaluator, GeneratedTuple, TupleConfig, TupleStrategy
 from evaluateur.generators.tuples import CrossProductTupleGenerator
 from evaluateur.types import create_options_model, is_iterator_field
 
@@ -113,14 +116,12 @@ class TestEvaluatorGenerateTuples:
         return Evaluator(Query, context="Test context")
 
     async def test_generate_tuples_with_options(self, evaluator: Evaluator) -> None:
-        """Test generate_tuples with pre-provided options."""
+        """Test tuples() with pre-provided options."""
         options = SimpleOptions()
 
         tuples = [
             t
-            async for t in evaluator.generate_tuples(
-                options, strategy=TupleStrategy.CROSS_PRODUCT, count=2
-            )
+            async for t in evaluator.tuples(options, config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=2))
         ]
 
         assert len(tuples) == 2
@@ -132,9 +133,9 @@ class TestEvaluatorGenerateTuples:
     async def test_generate_tuples_is_async_iterator(
         self, evaluator: Evaluator
     ) -> None:
-        """Test that generate_tuples returns an async iterator."""
+        """Test that tuples() returns an async iterator."""
         options = SimpleOptions()
-        gen = evaluator.generate_tuples(options, count=2)
+        gen = evaluator.tuples(options, config=TupleConfig(count=2))
 
         # Should be an async generator
         assert hasattr(gen, "__anext__")
@@ -144,3 +145,41 @@ class TestEvaluatorGenerateTuples:
         async for _ in gen:
             count += 1
         assert count == 2
+
+
+class LargeOptions(BaseModel):
+    a: list[int] = list(range(10_000))
+    b: list[int] = list(range(10_000))
+
+
+async def test_cross_product_does_not_materialize_full_space() -> None:
+    """Guard against materializing the full cartesian product in memory."""
+
+    gen = CrossProductTupleGenerator(client=None)
+    tuples = [t async for t in gen.generate(LargeOptions(), count=1)]
+    assert len(tuples) == 1
+    assert tuples[0].values["a"] == 0
+    assert tuples[0].values["b"] == 0
+
+
+def test_importing_queries_does_not_require_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Importing the library should not import DSPy implicitly."""
+
+    real_import = builtins.__import__
+
+    def guarded_import(name: str, *args, **kwargs):
+        if name == "dspy" or name.startswith("dspy."):
+            raise ImportError("blocked dspy import for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    sys.modules.pop("evaluateur.generators.queries", None)
+
+    mod = importlib.import_module("evaluateur.generators.queries")
+    assert hasattr(mod, "QueryMode")
+    assert hasattr(mod, "InstructorQueryGenerator")
+
+    # Accessing the symbol is fine; instantiation should fail with a clear error.
+    DSpyQueryGenerator = getattr(mod, "DSpyQueryGenerator")
+    with pytest.raises(RuntimeError, match="DSPy is not installed"):
+        DSpyQueryGenerator(MagicMock())
