@@ -158,8 +158,8 @@ async def test_cross_product_does_not_materialize_full_space() -> None:
     gen = CrossProductTupleGenerator(client=None)
     tuples = [t async for t in gen.generate(LargeOptions(), count=1)]
     assert len(tuples) == 1
-    assert tuples[0].values["a"] == 0
-    assert tuples[0].values["b"] == 0
+    assert 0 <= int(tuples[0].values["a"]) < 10_000
+    assert 0 <= int(tuples[0].values["b"]) < 10_000
 
 
 def test_importing_queries_does_not_require_dspy(monkeypatch: pytest.MonkeyPatch) -> None:

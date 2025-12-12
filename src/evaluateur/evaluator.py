@@ -31,6 +31,7 @@ class TupleConfig:
 
     strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT
     count: int = 20
+    seed: int = 0
 
 
 @dataclass(frozen=True)
@@ -176,7 +177,7 @@ class Evaluator:
         tuple_gen = self._build_tuple_generator(config.strategy)
         generated_count = 0
 
-        async for t in tuple_gen.generate(options_instance, config.count):
+        async for t in tuple_gen.generate(options_instance, config.count, seed=config.seed):
             generated_count += 1
             yield t
 

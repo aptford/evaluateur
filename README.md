@@ -51,7 +51,7 @@ async def main() -> None:
     # Step 2: turn options into tuples and natural language queries
     output = await evaluator.run(
         options=options,
-        tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50),
+        tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
         query_config=QueryConfig(mode=QueryMode.HYBRID),
     )
 
@@ -71,6 +71,16 @@ If your input model already uses iterator fields (for example
 options and are not modified by `generate_options()`. Scalar fields of any
 basic type (`str`, `int`, `float`, and so on) are turned into lists of
 options automatically.
+
+### Tuple generation: seeded sampling for cross product
+
+When `TupleStrategy.CROSS_PRODUCT` is used and `0 < count < total_combinations`,
+Evaluateur returns a **seeded randomized sample** of the cartesian product
+(*uniform without replacement*). This helps avoid always taking the “first N”
+combinations when the space is large.
+
+- To get reproducible results, set `TupleConfig(seed=...)`.
+- Changing the seed gives you a different randomized subset.
 
 ### Goal-guided query optimization (Components / Trajectories / Outcomes)
 

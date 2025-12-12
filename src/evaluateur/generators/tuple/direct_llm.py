@@ -32,7 +32,10 @@ class DirectLLMTupleGenerator:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
-    async def generate(self, options: BaseModel, count: int):
+    async def generate(self, options: BaseModel, count: int, *, seed: int = 0):
+        # Note: `seed` is accepted for API consistency with other tuple generators,
+        # but is not currently used because the LLM backend is non-deterministic.
+        _ = seed
         client = self._client.instructor_client
         log.info("DirectLLMTupleGenerator: requesting ~%d tuples from LLM", count)
 
