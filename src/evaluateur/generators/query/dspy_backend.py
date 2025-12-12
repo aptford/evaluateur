@@ -28,12 +28,16 @@ def require_dspy() -> Any:
     return dspy
 
 
-def configure_lm(client: LLMClient) -> None:
-    """Configure DSPy settings with the client's LM (or a default)."""
+def configure_lm(client: LLMClient) -> Any:
+    """Configure DSPy settings with the client's LM (or a default).
+
+    Returns the resolved DSPy LM instance used for configuration.
+    """
 
     dspy = require_dspy()
     lm = client.dspy_lm or dspy.LM(f"{client.provider}/{client.model_name}")
     dspy.settings.configure(lm=lm)
+    return lm
 
 
 def build_tuple_to_query_module() -> Any:

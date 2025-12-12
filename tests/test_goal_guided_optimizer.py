@@ -103,3 +103,93 @@ def test_goal_guided_optimizer_compile_uses_teleprompter_factory_without_dspy() 
 
     compiled = opt.compile(student=object(), trainset=[], valset=[])
     assert compiled is not None
+
+
+def test_goal_guided_optimizer_defaults_to_gepa_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GEPA should be the default teleprompter when available."""
+
+    from evaluateur.optimizers import goal_guided as gg
+
+    captures: dict[str, dict[str, object]] = {}
+
+    class _Settings:
+        lm = object()
+
+    class _GEPA:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            captures["gepa"] = dict(kwargs)
+
+        def compile(self, *, student, trainset, valset, **kwargs):  # type: ignore[no-untyped-def]
+            return student
+
+    class _MIPROv2:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            captures["miprov2"] = dict(kwargs)
+
+        def compile(self, *, student, trainset, valset, **kwargs):  # type: ignore[no-untyped-def]
+            return student
+
+    class _DSPyStub:
+        settings = _Settings()
+        GEPA = _GEPA
+        MIPROv2 = _MIPROv2
+
+    monkeypatch.setattr(gg, "dspy", _DSPyStub())
+
+    spec = GoalSpec(components=GoalLayer(items=[GoalItem(name="x", must_include=["payer"])]))
+    opt = GoalGuidedQueryOptimizer(goal_spec=spec, judge_backend=JudgeBackend.HEURISTIC, auto="light")
+
+    out = opt.compile(student=object(), trainset=[], valset=[])
+    assert out is not None
+    assert "gepa" in captures
+    assert captures["gepa"].get("auto") == "light"
+    assert "metric" in captures["gepa"]
+    assert captures["gepa"].get("reflection_lm") is _DSPyStub.settings.lm
+    assert "miprov2" not in captures
+
+
+def test_goal_guided_optimizer_can_select_miprov2(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MiProV2 should still be selectable explicitly."""
+
+    from evaluateur.optimizers import goal_guided as gg
+
+    captures: dict[str, dict[str, object]] = {}
+
+    class _Settings:
+        lm = object()
+
+    class _GEPA:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            captures["gepa"] = dict(kwargs)
+
+        def compile(self, *, student, trainset, valset, **kwargs):  # type: ignore[no-untyped-def]
+            return student
+
+    class _MIPROv2:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            captures["miprov2"] = dict(kwargs)
+
+        def compile(self, *, student, trainset, valset, **kwargs):  # type: ignore[no-untyped-def]
+            return student
+
+    class _DSPyStub:
+        settings = _Settings()
+        GEPA = _GEPA
+        MIPROv2 = _MIPROv2
+
+    monkeypatch.setattr(gg, "dspy", _DSPyStub())
+
+    spec = GoalSpec(components=GoalLayer(items=[GoalItem(name="x", must_include=["payer"])]))
+    opt = GoalGuidedQueryOptimizer(
+        goal_spec=spec,
+        judge_backend=JudgeBackend.HEURISTIC,
+        auto="light",
+        optimizer_name="miprov2",
+    )
+
+    out = opt.compile(student=object(), trainset=[], valset=[])
+    assert out is not None
+    assert "miprov2" in captures
+    assert captures["miprov2"].get("auto") == "light"
+    assert "metric" in captures["miprov2"]
+    assert "gepa" not in captures

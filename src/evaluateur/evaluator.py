@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Sequence, Type, TypeVar
+from typing import Any, Literal, Sequence, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -38,6 +38,9 @@ class DSpyConfig:
     """Configuration for DSPy-based query generation."""
 
     optimize: bool = False
+    # Which implicit DSPy optimizer to use when `optimize=True` (or when goal-guided
+    # optimization auto-creates an optimizer). Defaults to GEPA.
+    optimizer_name: Literal["gepa", "miprov2"] = "gepa"
     optimizer: DSpyOptimizer | None = None
     trainset: Sequence[Any] | None = None
     valset: Sequence[Any] | None = None
@@ -116,6 +119,7 @@ class Evaluator:
         mode: QueryMode,
         *,
         optimize_dspy: bool,
+        dspy_optimizer_name: Literal["gepa", "miprov2"],
         dspy_optimizer: DSpyOptimizer | None,
         dspy_trainset: Sequence[Any] | None,
         dspy_valset: Sequence[Any] | None,
@@ -131,6 +135,7 @@ class Evaluator:
             return DSpyQueryGenerator(
                 self.client,
                 optimize=optimize_dspy,
+                optimizer_name=dspy_optimizer_name,
                 optimizer=dspy_optimizer,
                 trainset=dspy_trainset,
                 valset=dspy_valset,
@@ -214,6 +219,7 @@ class Evaluator:
             resolved_optimizer = GoalGuidedQueryOptimizer(
                 goal_spec=resolved_goal_spec,
                 judge_backend=dspy.judge_backend,
+                optimizer_name=dspy.optimizer_name,
             )
 
         return resolved_optimizer, resolved_goal_spec, resolved_goal_prompt
@@ -262,6 +268,7 @@ class Evaluator:
             query_gen = DSpyQueryGenerator(
                 self.client,
                 optimize=dspy_cfg.optimize,
+                optimizer_name=dspy_cfg.optimizer_name,
                 optimizer=resolved_optimizer,
                 trainset=dspy_cfg.trainset,
                 valset=dspy_cfg.valset,

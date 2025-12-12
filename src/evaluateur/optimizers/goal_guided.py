@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Literal, Sequence
 
 from evaluateur.goals import GoalItem, GoalSpec
 
@@ -119,7 +119,7 @@ class HeuristicGoalJudge:
 class GoalGuidedQueryOptimizer:
     """DSPy optimizer that steers query generation to match a `GoalSpec`.
 
-    This wraps a DSPy teleprompter (default: MIPROv2) with a goal-aware metric.
+    This wraps a DSPy teleprompter (default: GEPA, fallback: MIPROv2) with a goal-aware metric.
 
     Notes
     -----
@@ -134,11 +134,13 @@ class GoalGuidedQueryOptimizer:
         *,
         judge_backend: JudgeBackend = JudgeBackend.LLM,
         auto: str = "light",
+        optimizer_name: Literal["gepa", "miprov2"] = "gepa",
         teleprompter_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.goal_spec = goal_spec
         self.judge_backend = judge_backend
         self.auto = auto
+        self.optimizer_name = optimizer_name
         self._teleprompter_factory = teleprompter_factory
 
         if self.judge_backend == JudgeBackend.HEURISTIC:
@@ -208,15 +210,48 @@ class GoalGuidedQueryOptimizer:
 
         teleprompter_factory = self._teleprompter_factory
         if teleprompter_factory is None:
-            teleprompter_factory = getattr(dspy, "MIPROv2", None)
+            gepa_factory = getattr(dspy, "GEPA", None)
+            miprov2_factory = getattr(dspy, "MIPROv2", None)
+
+            def _reflection_lm() -> Any | None:
+                settings = getattr(dspy, "settings", None)
+                return getattr(settings, "lm", None)
+
+            if self.optimizer_name == "gepa":
+                if gepa_factory is not None:
+                    reflection_lm = _reflection_lm()
+                    if reflection_lm is None:
+                        raise RuntimeError(
+                            "DSPy GEPA requires a reflection LM. Configure DSPy settings (configure_lm) "
+                            "before compiling, or pass a custom teleprompter_factory."
+                        )
+
+                    teleprompter = gepa_factory(metric=metric, auto=self.auto, reflection_lm=reflection_lm)
+                    teleprompter_factory = lambda **_: teleprompter  # type: ignore[assignment]
+                elif miprov2_factory is not None:
+                    teleprompter_factory = miprov2_factory
+            else:
+                if miprov2_factory is not None:
+                    teleprompter_factory = miprov2_factory
+                elif gepa_factory is not None:
+                    reflection_lm = _reflection_lm()
+                    if reflection_lm is None:
+                        raise RuntimeError(
+                            "DSPy GEPA requires a reflection LM. Configure DSPy settings (configure_lm) "
+                            "before compiling, or pass a custom teleprompter_factory."
+                        )
+                    teleprompter = gepa_factory(metric=metric, auto=self.auto, reflection_lm=reflection_lm)
+                    teleprompter_factory = lambda **_: teleprompter  # type: ignore[assignment]
 
         if teleprompter_factory is None:  # pragma: no cover
-            raise RuntimeError("DSPy MIPROv2 is not available in this DSPy version.")
+            raise RuntimeError("No supported DSPy optimizer is available in this DSPy version (GEPA/MIPROv2).")
 
+        # If we wrapped GEPA above, teleprompter_factory ignores args and returns a pre-built instance.
         teleprompter = teleprompter_factory(metric=metric, auto=self.auto)
 
         log.info(
-            "GoalGuidedQueryOptimizer: compiling (judge=%s, auto=%s)",
+            "GoalGuidedQueryOptimizer: compiling (optimizer=%s, judge=%s, auto=%s)",
+            self.optimizer_name,
             self.judge_backend.value,
             self.auto,
         )

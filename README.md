@@ -83,6 +83,29 @@ The goals are used in two ways:
 - In DSPy/HYBRID modes you can also enable **compile-time optimization** with a
   goal-aware DSPy optimizer.
 
+#### Which DSPy optimizer is used?
+
+When compile-time optimization is enabled, Evaluateur uses **GEPA by default** (it tends to outperform MiProV2, but can cost more because it does reflective optimization).
+
+- **GEPA**: best quality in many cases, but usually slower and more expensive.
+- **MiProV2**: often faster/cheaper, and a good baseline when you want quick iteration.
+
+To force MiProV2:
+
+```python
+QueryConfig(
+    mode=QueryMode.DSPY,
+    dspy=DSpyConfig(
+        optimize=True,
+        optimizer_name="miprov2",
+        trainset=[...],  # required for optimization
+        # valset=[...],  # optional
+    ),
+)
+```
+
+Note: compile-time optimization only runs when you provide a `trainset` and/or `valset`. If you omit both, Evaluateur will skip compilation and just run the base DSPy module.
+
 Structured goals:
 
 ```python
