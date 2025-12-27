@@ -8,13 +8,9 @@ from functools import lru_cache
 from typing import Any, Callable, Iterable, Literal, Sequence
 
 from evaluateur.goals import GoalItem, GoalSpec
+from evaluateur.integrations.dspy import require_dspy
 
 log = logging.getLogger(__name__)
-
-try:
-    import dspy  # type: ignore[import]
-except Exception:  # pragma: no cover - optional dependency
-    dspy = None  # type: ignore[assignment]
 
 
 class JudgeBackend(str, Enum):
@@ -62,7 +58,9 @@ class HeuristicGoalJudge:
 
     goal_spec: GoalSpec
 
-    def score(self, *, query: str, tuple_json: str | None = None, context: str | None = None) -> float:
+    def score(
+        self, *, query: str, tuple_json: str | None = None, context: str | None = None
+    ) -> float:
         q = (query or "").lower()
 
         # Basic query quality heuristics.
@@ -82,7 +80,9 @@ class HeuristicGoalJudge:
 
         # Encourage leveraging context.
         if context:
-            ctx_tokens = [t.strip().lower() for t in context.split() if len(t.strip()) >= 6]
+            ctx_tokens = [
+                t.strip().lower() for t in context.split() if len(t.strip()) >= 6
+            ]
             if ctx_tokens:
                 hits = sum(1 for t in ctx_tokens[:10] if t in q)
                 base += 0.1 * min(1.0, hits / 3.0)
@@ -158,12 +158,15 @@ class GoalGuidedQueryOptimizer:
                 tuple_json = getattr(ex, "tuple_json", None)
                 context = getattr(ex, "context", None)
                 assert self._heuristic is not None
-                return float(self._heuristic.score(query=query, tuple_json=tuple_json, context=context))
+                return float(
+                    self._heuristic.score(
+                        query=query, tuple_json=tuple_json, context=context
+                    )
+                )
 
             return metric
 
-        if dspy is None:  # pragma: no cover
-            raise RuntimeError("DSPy is not installed but LLM judge backend was requested.")
+        dspy = require_dspy()
 
         # LLM-based judge: ask for a strict, rubric-driven score in [0, 1].
         class _GoalJudgeSignature(dspy.Signature):  # type: ignore[valid-type]
@@ -203,8 +206,7 @@ class GoalGuidedQueryOptimizer:
     ) -> Any:
         """Compile/optimize a DSPy module using a goal-aware metric."""
 
-        if dspy is None:  # pragma: no cover - defensive
-            raise RuntimeError("DSPy is not installed but a DSPy optimizer was requested.")
+        dspy = require_dspy()
 
         metric = self._build_metric()
 
@@ -226,7 +228,11 @@ class GoalGuidedQueryOptimizer:
                             "before compiling, or pass a custom teleprompter_factory."
                         )
 
-                    teleprompter = gepa_factory(metric=metric, auto=self.auto, reflection_lm=reflection_lm)
+                    teleprompter = gepa_factory(
+                        metric=metric,
+                        auto=self.auto,
+                        reflection_lm=reflection_lm,
+                    )
                     teleprompter_factory = lambda **_: teleprompter  # type: ignore[assignment]
                 elif miprov2_factory is not None:
                     teleprompter_factory = miprov2_factory
@@ -240,11 +246,15 @@ class GoalGuidedQueryOptimizer:
                             "DSPy GEPA requires a reflection LM. Configure DSPy settings (configure_lm) "
                             "before compiling, or pass a custom teleprompter_factory."
                         )
-                    teleprompter = gepa_factory(metric=metric, auto=self.auto, reflection_lm=reflection_lm)
+                    teleprompter = gepa_factory(
+                        metric=metric, auto=self.auto, reflection_lm=reflection_lm
+                    )
                     teleprompter_factory = lambda **_: teleprompter  # type: ignore[assignment]
 
         if teleprompter_factory is None:  # pragma: no cover
-            raise RuntimeError("No supported DSPy optimizer is available in this DSPy version (GEPA/MIPROv2).")
+            raise RuntimeError(
+                "No supported DSPy optimizer is available in this DSPy version (GEPA/MIPROv2)."
+            )
 
         # If we wrapped GEPA above, teleprompter_factory ignores args and returns a pre-built instance.
         teleprompter = teleprompter_factory(metric=metric, auto=self.auto)

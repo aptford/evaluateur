@@ -11,13 +11,17 @@ from evaluateur.client import LLMClient
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
 from evaluateur.generators.query.context import compose_context
 from evaluateur.goals import GoalSpec
-from evaluateur.generators.queries import DSpyOptimizer, InstructorQueryGenerator, QueryGenerator
+from evaluateur.generators.queries import (
+    DSpyOptimizer,
+    InstructorQueryGenerator,
+    QueryGenerator,
+)
 from evaluateur.generators.tuples import (
     CrossProductTupleGenerator,
     DirectLLMTupleGenerator,
     TupleGenerator,
 )
-from evaluateur.models import EvaluatorOutput, GeneratedQuery, GeneratedTuple
+from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
 from evaluateur.optimizers import GoalGuidedQueryOptimizer, JudgeBackend
 
 log = logging.getLogger(__name__)
@@ -124,8 +128,6 @@ class Evaluator:
         dspy_optimizer: DSpyOptimizer | None,
         dspy_trainset: Sequence[Any] | None,
         dspy_valset: Sequence[Any] | None,
-        goal_spec: GoalSpec | None,
-        goal_prompt: str | None,
     ) -> QueryGenerator:
         """Build a query generator based on the specified mode."""
         if mode == QueryMode.INSTRUCTOR:
@@ -140,13 +142,11 @@ class Evaluator:
                 optimizer=dspy_optimizer,
                 trainset=dspy_trainset,
                 valset=dspy_valset,
-                goal_spec=goal_spec,
-                goal_prompt=goal_prompt,
             )
         if mode == QueryMode.HYBRID:
             from evaluateur.generators.queries import HybridQueryGenerator
 
-            return HybridQueryGenerator(self.client, goal_spec=goal_spec, goal_prompt=goal_prompt)
+            return HybridQueryGenerator(self.client)
         raise ValueError(f"Unsupported query mode: {mode}")
 
     async def _ensure_options(self, maybe_options: BaseModel | None) -> BaseModel:
@@ -177,13 +177,17 @@ class Evaluator:
         tuple_gen = self._build_tuple_generator(config.strategy)
         generated_count = 0
 
-        async for t in tuple_gen.generate(options_instance, config.count, seed=config.seed):
+        async for t in tuple_gen.generate(
+            options_instance, config.count, seed=config.seed
+        ):
             generated_count += 1
             yield t
 
         log.info("Generated %d tuples", generated_count)
 
-    async def _normalize_goals(self, goals: GoalSpec | str | None) -> tuple[GoalSpec | None, str | None]:
+    async def _normalize_goals(
+        self, goals: GoalSpec | str | None
+    ) -> tuple[GoalSpec | None, str | None]:
         if goals is None:
             return None, None
         if isinstance(goals, str):
@@ -215,7 +219,9 @@ class Evaluator:
             and mode in (QueryMode.DSPY, QueryMode.HYBRID)
         ):
             if resolved_goal_spec is None:
-                resolved_goal_spec = GoalSpec(title="Goal-guided (no explicit goals provided)")
+                resolved_goal_spec = GoalSpec(
+                    title="Goal-guided (no explicit goals provided)"
+                )
                 resolved_goal_prompt = resolved_goal_spec.render_prompt()
             resolved_optimizer = GoalGuidedQueryOptimizer(
                 goal_spec=resolved_goal_spec,
@@ -225,12 +231,15 @@ class Evaluator:
 
         return resolved_optimizer, resolved_goal_spec, resolved_goal_prompt
 
-    async def _collect_tuples(
+    async def _aiter_tuples(
         self, tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple]
-    ) -> list[GeneratedTuple]:
+    ) -> AsyncIterator[GeneratedTuple]:
         if hasattr(tuples, "__aiter__"):
-            return [t async for t in tuples]  # type: ignore[misc]
-        return list(tuples)
+            async for t in tuples:  # type: ignore[misc]
+                yield t
+            return
+        for t in tuples:
+            yield t
 
     async def queries(
         self,
@@ -238,7 +247,7 @@ class Evaluator:
         tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
         config: QueryConfig = QueryConfig(),
         goals: GoalSpec | str | None = None,
-    ) -> EvaluatorOutput:
+    ) -> AsyncIterator[GeneratedQuery]:
         log.info(
             "Generating queries: mode=%s, tuple_count=%s",
             config.mode.value,
@@ -254,45 +263,39 @@ class Evaluator:
             goal_spec=goal_spec,
             goal_prompt=goal_prompt,
         )
+        effective_context = compose_context(self.context, goal_prompt)
 
-        tuples_list = await self._collect_tuples(tuples)
-        log.info("Collected %d tuples", len(tuples_list))
+        query_gen = self._build_query_generator(
+            config.mode,
+            optimize_dspy=dspy_cfg.optimize,
+            dspy_optimizer_name=dspy_cfg.optimizer_name,
+            dspy_optimizer=resolved_optimizer,
+            dspy_trainset=dspy_cfg.trainset,
+            dspy_valset=dspy_cfg.valset,
+        )
 
-        query_gen: QueryGenerator
-        if config.mode == QueryMode.INSTRUCTOR:
-            query_gen = InstructorQueryGenerator(self.client)
-            effective_context = compose_context(self.context, goal_prompt)
-            queries = await query_gen.generate(tuples_list, effective_context)
-        elif config.mode == QueryMode.DSPY:
-            from evaluateur.generators.queries import DSpyQueryGenerator
+        run_metadata = QueryMetadata(
+            mode=config.mode.value,
+            goal_guided=bool(goal_prompt),
+            query_goals=(
+                goal_spec.to_metadata()
+                if goal_spec is not None and not goal_spec.is_empty()
+                else None
+            ),
+        )
 
-            query_gen = DSpyQueryGenerator(
-                self.client,
-                optimize=dspy_cfg.optimize,
-                optimizer_name=dspy_cfg.optimizer_name,
-                optimizer=resolved_optimizer,
-                trainset=dspy_cfg.trainset,
-                valset=dspy_cfg.valset,
-                goal_spec=goal_spec,
-                goal_prompt=goal_prompt,
+        async for q in query_gen.generate(
+            self._aiter_tuples(tuples), effective_context
+        ):
+            merged = {
+                **q.metadata.model_dump(),
+                **run_metadata.model_dump(exclude_none=True),
+            }
+            yield GeneratedQuery(
+                query=q.query,
+                source_tuple=q.source_tuple,
+                metadata=QueryMetadata.model_validate(merged),
             )
-            queries = await query_gen.generate(tuples_list, self.context)
-        elif config.mode == QueryMode.HYBRID:
-            from evaluateur.generators.queries import HybridQueryGenerator
-
-            query_gen = HybridQueryGenerator(self.client, goal_spec=goal_spec, goal_prompt=goal_prompt)
-            queries = await query_gen.generate(tuples_list, self.context)
-        else:  # pragma: no cover - defensive
-            raise ValueError(f"Unsupported query mode: {config.mode}")
-
-        log.info("Generated %d queries", len(queries))
-
-        metadata: dict[str, Any] = {}
-        if goal_spec is not None and not goal_spec.is_empty():
-            metadata["query_goals"] = goal_spec.to_metadata()
-        metadata["goal_guided"] = bool(goal_prompt)
-        metadata["mode"] = config.mode.value
-        return EvaluatorOutput(tuples=tuples_list, queries=queries, metadata=metadata)
 
     async def run(
         self,
@@ -301,9 +304,12 @@ class Evaluator:
         tuple_config: TupleConfig = TupleConfig(),
         query_config: QueryConfig = QueryConfig(),
         goals: GoalSpec | str | None = None,
-    ) -> EvaluatorOutput:
-        """Convenience wrapper: options → tuples → queries."""
+    ) -> AsyncIterator[GeneratedQuery]:
+        """Convenience wrapper: options → tuples → queries (streaming)."""
 
         options_instance = await self._ensure_options(options)
         tuple_iter = self.tuples(options_instance, config=tuple_config)
-        return await self.queries(tuples=tuple_iter, config=query_config, goals=goals)
+        async for q in self.queries(
+            tuples=tuple_iter, config=query_config, goals=goals
+        ):
+            yield q

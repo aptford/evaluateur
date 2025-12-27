@@ -18,6 +18,10 @@ DSPy support is optional. If you want to use `QueryMode.DSPY` or DSPy refinement
 uv add "evaluateur[dspy]"
 ```
 
+Note: Evaluateur keeps DSPy as a true optional dependency. Importing `evaluateur`
+does not import DSPy; DSPy is only imported when you use `QueryMode.DSPY`,
+`QueryMode.HYBRID`, or DSPy-backed optimization.
+
 ### Basic usage
 
 Define a Pydantic model that represents the dimensions of your evaluation
@@ -48,14 +52,12 @@ async def main() -> None:
         instructions="Focus on common US payers and edge-case clinical scenarios.",
     )
 
-    # Step 2: turn options into tuples and natural language queries
-    output = await evaluator.run(
+    # Step 2: stream tuples -> natural language queries
+    async for q in evaluator.run(
         options=options,
         tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
         query_config=QueryConfig(mode=QueryMode.HYBRID),
-    )
-
-    for q in output.queries:
+    ):
         print(q.source_tuple.values, "->", q.query)
 
 
@@ -169,7 +171,7 @@ async def main() -> None:
         ),
     )
 
-    output = await evaluator.run(
+    async for q in evaluator.run(
         query_config=QueryConfig(
             mode=QueryMode.DSPY,
             dspy=DSpyConfig(
@@ -178,9 +180,9 @@ async def main() -> None:
             ),
         ),
         goals=goals,
-    )
-
-    print(output.metadata.get("query_goals"))
+    ):
+        print(q.metadata.query_goals)
+        break
 
 
 asyncio.run(main())
@@ -205,7 +207,8 @@ class Query(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(Query, context="Healthcare prior authorization")
 
-    output = await evaluator.run(
+    i = 0
+    async for q in evaluator.run(
         query_config=QueryConfig(
             mode=QueryMode.DSPY,
             dspy=DSpyConfig(goal_guided=True),
@@ -215,10 +218,11 @@ Components: force freshness (effective date, latest policy) and grounded citatio
 Trajectories: include conflicting evidence and require resolving or escalating.
 Outcomes: short, checklist-friendly queries that reveal missing inputs.
 """,
-    )
-
-    for q in output.queries[:3]:
+    ):
         print(q.query)
+        i += 1
+        if i >= 3:
+            break
 
 
 asyncio.run(main())

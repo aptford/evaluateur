@@ -10,7 +10,9 @@ import pytest
 from pydantic import BaseModel, Field
 
 from evaluateur import Evaluator, GeneratedTuple, TupleConfig, TupleStrategy
+from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 from evaluateur.generators.tuples import CrossProductTupleGenerator
+from evaluateur.models import GeneratedQuery
 from evaluateur.types import create_options_model, is_iterator_field
 
 
@@ -183,3 +185,45 @@ def test_importing_queries_does_not_require_dspy(monkeypatch: pytest.MonkeyPatch
     DSpyQueryGenerator = getattr(mod, "DSpyQueryGenerator")
     with pytest.raises(RuntimeError, match="DSPy is not installed"):
         DSpyQueryGenerator(MagicMock())
+
+
+async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None:
+    evaluator = Evaluator(Query, context="Test context")
+
+    class DummyQueryGenerator:
+        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
+            async for t in tuples:
+                yield GeneratedQuery(
+                    query=f"Q:{t.values}",
+                    source_tuple=t,
+                    metadata={"refined": True},
+                )
+
+    goals = GoalSpec(
+        title="test goals",
+        components=GoalLayer(items=[GoalItem(name="force payer")]),
+    )
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
+
+    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+        results = [
+            q
+            async for q in evaluator.queries(
+                tuples=[t1, t2],
+                goals=goals,
+            )
+        ]
+
+    assert len(results) == 2
+    assert results[0].source_tuple.values["payer"] == "Cigna"
+    assert results[1].source_tuple.values["payer"] == "Aetna"
+
+    for q in results:
+        # Per-query metadata is preserved
+        assert q.metadata.refined is True
+        # Run metadata is injected per item
+        assert q.metadata.mode == "instructor"  # default QueryConfig.mode
+        assert q.metadata.goal_guided is True
+        assert isinstance(q.metadata.query_goals, dict)

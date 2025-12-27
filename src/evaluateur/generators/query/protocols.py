@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence
+from collections.abc import AsyncIterator, Sequence
+from typing import Any, Protocol
 
 from evaluateur.models import GeneratedQuery, GeneratedTuple
 
@@ -9,9 +10,9 @@ class QueryGenerator(Protocol):
     """Protocol for async query generators."""
 
     async def generate(
-        self, tuples: list[GeneratedTuple], context: str
-    ) -> list[GeneratedQuery]:
-        """Generate queries asynchronously from a list of tuples."""
+        self, tuples: AsyncIterator[GeneratedTuple], context: str
+    ) -> AsyncIterator[GeneratedQuery]:
+        """Generate queries asynchronously from tuples (streaming)."""
 
 
 class DSpyOptimizer(Protocol):
@@ -22,9 +23,9 @@ class DSpyOptimizer(Protocol):
 
     def compile(
         self,
-        student: Any,
-        trainset: Sequence[Any] | None = None,
-        valset: Sequence[Any] | None = None,
+        student: object,
+        trainset: Sequence[object] | None = None,
+        valset: Sequence[object] | None = None,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> object: ...
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from evaluateur.types import ScalarValue
 
@@ -23,21 +23,30 @@ class GeneratedTuple(BaseModel, Generic[ModelT]):
     values: dict[str, ScalarValue]
 
 
+class QueryMetadata(BaseModel):
+    """Metadata associated with a generated query.
+
+    This includes both:
+    - run-level metadata injected by the evaluator (mode, goal_guided, goals)
+    - per-query metadata set by generators (e.g. refined)
+
+    Extra keys are allowed for experimentation and backend-specific tracing.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    # Run-level fields (injected by Evaluator.queries)
+    mode: Literal["instructor", "dspy", "hybrid"] | None = None
+    goal_guided: bool = False
+    query_goals: dict[str, Any] | None = None
+
+    # Per-query fields
+    refined: bool = False
+
+
 class GeneratedQuery(BaseModel):
     """Natural language query with full traceability back to its tuple."""
 
     query: str
     source_tuple: GeneratedTuple
-    metadata: dict[str, Any] = {}
-
-
-class EvaluatorOutput(BaseModel):
-    """Full structured output of the evaluator.
-
-    This keeps both the intermediate tuples and the final queries so that
-    downstream evaluation code can reason about coverage and failure modes.
-    """
-
-    tuples: list[GeneratedTuple]
-    queries: list[GeneratedQuery]
-    metadata: dict[str, Any] = {}
+    metadata: QueryMetadata = Field(default_factory=QueryMetadata)

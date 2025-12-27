@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Literal, Sequence
+from collections.abc import AsyncIterator, Sequence
+from typing import Any, Literal
 
 from evaluateur.client import LLMClient
-from evaluateur.generators.query.context import compose_context
-from evaluateur.generators.query.dspy_backend import build_tuple_to_query_module, configure_lm, require_dspy
-from evaluateur.generators.query.protocols import DSpyOptimizer
 from evaluateur.goals import GoalSpec
+from evaluateur.integrations.dspy.backend import build_tuple_to_query_module, configure_lm
+from evaluateur.integrations.dspy.imports import require_dspy
+from evaluateur.integrations.dspy.types import DSpyOptimizer, TupleToQueryModule
 from evaluateur.models import GeneratedQuery, GeneratedTuple
 
 log = logging.getLogger(__name__)
@@ -99,24 +100,24 @@ class DSpyQueryGenerator:
         optimize: bool = False,
         optimizer_name: Literal["gepa", "miprov2"] = "gepa",
         optimizer: DSpyOptimizer | None = None,
-        trainset: Sequence[Any] | None = None,
-        valset: Sequence[Any] | None = None,
+        trainset: Sequence[object] | None = None,
+        valset: Sequence[object] | None = None,
         goal_spec: GoalSpec | None = None,
         goal_prompt: str | None = None,
     ) -> None:
         # Fail fast if requested but unavailable.
         require_dspy()
 
+        # goal_spec/goal_prompt are currently unused by the base DSPy generator,
+        # but are kept for forward compatibility with goal-conditioned DSPy modules.
+        _ = goal_spec, goal_prompt
+
         self._client = client
         self._dspy_lm = configure_lm(client)
         self._optimizer_name = optimizer_name
 
-        self._goal_prompt = goal_prompt or (
-            goal_spec.render_prompt() if goal_spec is not None else None
-        )
-
-        self._base_module = build_tuple_to_query_module()
-        self._compiled_module: Any | None = None
+        self._base_module: TupleToQueryModule = build_tuple_to_query_module()
+        self._compiled_module: TupleToQueryModule | None = None
 
         if optimizer is not None:
             if trainset is None and valset is None:
@@ -126,15 +127,18 @@ class DSpyQueryGenerator:
                 )
             else:
                 log.info("DSpyQueryGenerator: compiling with custom optimizer")
-                self._compiled_module = optimizer.compile(
+                compiled = optimizer.compile(
                     student=self._base_module,
-                    trainset=trainset,
-                    valset=valset,
+                    trainset=list(trainset) if trainset is not None else None,
+                    valset=list(valset) if valset is not None else None,
                 )
+                self._compiled_module = compiled  # type: ignore[assignment]
         elif optimize:
             if trainset is None and valset is None:
                 # Do not attempt implicit compilation with no data.
-                log.info("DSpyQueryGenerator: optimize requested but no train/val set; skipping compilation")
+                log.info(
+                    "DSpyQueryGenerator: optimize requested but no train/val set; skipping compilation"
+                )
             else:
                 dspy = require_dspy()
                 auto = "light"
@@ -156,35 +160,28 @@ class DSpyQueryGenerator:
                         trainset=list(trainset) if trainset is not None else None,
                         valset=list(valset) if valset is not None else None,
                     )
-                    self._compiled_module = compiled
+                    self._compiled_module = compiled  # type: ignore[assignment]
                 except Exception:
-                    log.warning("DSpyQueryGenerator: default optimizer failed, using base module")
+                    log.warning(
+                        "DSpyQueryGenerator: default optimizer failed, using base module"
+                    )
                     self._compiled_module = None
 
-    async def generate(self, tuples: list[GeneratedTuple], context: str) -> list[GeneratedQuery]:
-        results: list[GeneratedQuery] = []
-
+    async def generate(
+        self, tuples: AsyncIterator[GeneratedTuple], context: str
+    ) -> AsyncIterator[GeneratedQuery]:
         module = self._compiled_module or self._base_module
         using_compiled = self._compiled_module is not None
         log.info(
-            "DSpyQueryGenerator: generating queries for %d tuples (compiled=%s)",
-            len(tuples),
+            "DSpyQueryGenerator: generating queries (compiled=%s)",
             using_compiled,
         )
-
-        effective_context = compose_context(context, self._goal_prompt)
-
-        for i, t in enumerate(tuples):
+        i = 0
+        async for t in tuples:
+            i += 1
             tuple_json = t.model_dump_json()
-            log.debug("DSpyQueryGenerator: processing tuple %d/%d", i + 1, len(tuples))
-            pred = module(context=effective_context, tuple_json=tuple_json)
-            results.append(
-                GeneratedQuery(
-                    query=pred.query,
-                    source_tuple=t,
-                    metadata={"goal_guided": bool(self._goal_prompt)},
-                )
-            )
+            log.debug("DSpyQueryGenerator: processing tuple %d", i)
+            pred = module(context=context, tuple_json=tuple_json)
+            yield GeneratedQuery(query=pred.query, source_tuple=t)
 
-        return results
 

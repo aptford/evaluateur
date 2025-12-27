@@ -8,12 +8,6 @@ import instructor
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-try:
-    import dspy  # type: ignore[import]
-except Exception:  # pragma: no cover - optional dependency at runtime
-    dspy = None  # type: ignore[assignment]
-
-
 DEFAULT_MODEL_NAME = os.getenv("EVALUATEUR_MODEL_NAME", "gpt-4o-mini")
 
 
@@ -75,8 +69,9 @@ class LLMClient:
             The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
             or "gpt-4o-mini".
         dspy_lm
-            Optional pre-configured DSPy language model. If not provided and
-            DSPy is available, one will be created automatically.
+            Optional pre-configured DSPy language model. Evaluateur does not
+            import or initialize DSPy at import-time; if you use DSPy features
+            and do not provide this, a default will be created lazily.
 
         Returns
         -------
@@ -92,18 +87,11 @@ class LLMClient:
         else:
             inst_client = instructor.from_provider(f"{provider}/{model}")
 
-        resolved_dspy_lm = dspy_lm
-        if resolved_dspy_lm is None and dspy is not None:
-            try:
-                resolved_dspy_lm = dspy.LM(f"{provider}/{model}")
-            except Exception:
-                resolved_dspy_lm = None
-
         return cls(
             provider=provider,
             model_name=model,
             _instructor_client=inst_client,
-            _dspy_lm=resolved_dspy_lm,
+            _dspy_lm=dspy_lm,
         )
 
     @classmethod

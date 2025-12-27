@@ -3,29 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from evaluateur.client import LLMClient
-
-
-def import_dspy() -> Any | None:
-    """Import DSPy if available, otherwise return None.
-
-    This function is the only place that imports DSPy directly. All other
-    modules should call this (or `require_dspy`) to keep DSPy optional.
-    """
-
-    try:
-        import dspy  # type: ignore[import]
-    except Exception:  # pragma: no cover - optional dependency
-        return None
-    return dspy
-
-
-def require_dspy() -> Any:
-    """Return the DSPy module, raising a clear error if not installed."""
-
-    dspy = import_dspy()
-    if dspy is None:  # pragma: no cover
-        raise RuntimeError("DSPy is not installed but DSPy query mode was requested.")
-    return dspy
+from evaluateur.integrations.dspy.imports import require_dspy
+from evaluateur.integrations.dspy.types import RefinerModule, TupleToQueryModule
 
 
 def configure_lm(client: LLMClient) -> Any:
@@ -40,7 +19,7 @@ def configure_lm(client: LLMClient) -> Any:
     return lm
 
 
-def build_tuple_to_query_module() -> Any:
+def build_tuple_to_query_module() -> TupleToQueryModule:
     """Build the DSPy module for tuple -> query generation."""
 
     dspy = require_dspy()
@@ -55,7 +34,7 @@ def build_tuple_to_query_module() -> Any:
     return dspy.ChainOfThought(TupleToQuerySignature)
 
 
-def build_refiner_module() -> Any:
+def build_refiner_module() -> RefinerModule:
     """Build a lightweight DSPy module to refine a draft query."""
 
     dspy = require_dspy()
@@ -68,4 +47,5 @@ def build_refiner_module() -> Any:
         refined_query = dspy.OutputField()
 
     return dspy.ChainOfThought(RefineSignature)
+
 

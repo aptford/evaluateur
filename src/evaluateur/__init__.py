@@ -4,7 +4,7 @@ from .client import LLMClient
 from .evaluator import DSpyConfig, Evaluator, QueryConfig, TupleConfig
 from .generators import QueryMode, TupleStrategy
 from .goals import GoalItem, GoalLayer, GoalSpec
-from .models import EvaluatorOutput, GeneratedQuery, GeneratedTuple
+from .models import GeneratedQuery, GeneratedTuple
 from .optimizers import GoalGuidedQueryOptimizer, JudgeBackend
 
 __all__ = [
@@ -20,7 +20,6 @@ __all__ = [
     "GoalSpec",
     "GoalGuidedQueryOptimizer",
     "JudgeBackend",
-    "EvaluatorOutput",
     "GeneratedQuery",
     "GeneratedTuple",
 ]
