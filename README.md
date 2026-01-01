@@ -139,7 +139,7 @@ async def main() -> None:
         ),
         goals=goals,
     ):
-        print(q.metadata.query_goals)
+        print(q.metadata.query_goals.model_dump() if q.metadata.query_goals else None)
         break
 
 

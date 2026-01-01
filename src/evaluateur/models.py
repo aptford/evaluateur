@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Generic, Literal, TypeVar
+from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from evaluateur.goals import GoalSpec
 from evaluateur.types import ScalarValue
 
 
@@ -27,8 +28,8 @@ class QueryMetadata(BaseModel):
     """Metadata associated with a generated query.
 
     This includes both:
-    - run-level metadata injected by the evaluator (mode, goal_guided, goals)
-    - per-query metadata set by generators (e.g. refined)
+    - run-level metadata injected by the evaluator (mode, goal_guided, query_goals)
+    - per-query metadata set by generators (free-form keys)
 
     Extra keys are allowed for experimentation and backend-specific tracing.
     """
@@ -38,10 +39,7 @@ class QueryMetadata(BaseModel):
     # Run-level fields (injected by Evaluator.queries)
     mode: Literal["instructor"] | None = None
     goal_guided: bool = False
-    query_goals: dict[str, Any] | None = None
-
-    # Per-query fields
-    refined: bool = False
+    query_goals: GoalSpec | None = None
 
 
 class GeneratedQuery(BaseModel):

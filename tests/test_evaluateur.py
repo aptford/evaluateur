@@ -170,7 +170,7 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
                 yield GeneratedQuery(
                     query=f"Q:{t.values}",
                     source_tuple=t,
-                    metadata={"refined": True},
+                    metadata={"generator": "dummy"},
                 )
 
     goals = GoalSpec(
@@ -195,9 +195,11 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
     assert results[1].source_tuple.values["payer"] == "Aetna"
 
     for q in results:
-        # Per-query metadata is preserved
-        assert q.metadata.refined is True
+        # Per-query metadata is preserved (extra keys)
+        assert q.metadata.generator == "dummy"
         # Run metadata is injected per item
         assert q.metadata.mode == "instructor"  # default QueryConfig.mode
         assert q.metadata.goal_guided is True
-        assert isinstance(q.metadata.query_goals, dict)
+        assert isinstance(q.metadata.query_goals, GoalSpec)
+        assert q.metadata.query_goals.title == "test goals"
+        assert q.metadata.query_goals.components.items[0].name == "force payer"

@@ -192,9 +192,7 @@ class Evaluator:
             mode=config.mode.value,
             goal_guided=bool(goal_prompt),
             query_goals=(
-                goal_spec.to_metadata()
-                if goal_spec is not None and not goal_spec.is_empty()
-                else None
+                goal_spec if goal_spec is not None and not goal_spec.is_empty() else None
             ),
         )
 
@@ -203,7 +201,7 @@ class Evaluator:
         ):
             merged = {
                 # Run metadata provides defaults; per-query metadata should win
-                # (e.g. generator may set refined=True).
+                # (e.g. generator may attach tracing keys).
                 **run_metadata.model_dump(exclude_none=True),
                 **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
             }
