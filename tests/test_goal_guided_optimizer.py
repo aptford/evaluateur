@@ -28,3 +28,20 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
 
 def test_goal_spec_is_empty_when_no_goals() -> None:
     assert GoalSpec().is_empty() is True
+
+
+def test_goal_spec_render_prompt_truncation_respects_max_chars() -> None:
+    # Make a prompt that will definitely exceed the max.
+    spec = GoalSpec(
+        title="T",
+        components=GoalLayer(
+            summary=("x" * 500),
+            items=[GoalItem(name="n", must_include=["a" * 200])],
+        ),
+    )
+
+    max_chars = 80
+    prompt = spec.render_prompt(max_chars=max_chars)
+
+    assert len(prompt) <= max_chars
+    assert prompt.endswith("…\n")

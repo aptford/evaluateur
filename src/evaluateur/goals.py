@@ -113,7 +113,12 @@ class GoalSpec(BaseModel):
             not self.components.items
             and not self.trajectories.items
             and not self.outcomes.items
-            and not (self.title or self.components.summary or self.trajectories.summary or self.outcomes.summary)
+            and not (
+                self.title
+                or self.components.summary
+                or self.trajectories.summary
+                or self.outcomes.summary
+            )
         )
 
     def render_prompt(self, *, max_chars: int = 1800) -> str:
@@ -134,9 +139,12 @@ class GoalSpec(BaseModel):
                 line = " - ".join(parts)
                 extra: list[str] = []
                 if it.must_include:
-                    extra.append("must include: " + ", ".join(it.must_include))
+                    extra.append(
+                        "must include: "
+                        + ", ".join(f"`{it}`" for it in it.must_include)
+                    )
                 if it.avoid:
-                    extra.append("avoid: " + ", ".join(it.avoid))
+                    extra.append("avoid: " + ", ".join(f"`{it}`" for it in it.avoid))
                 if extra:
                     line += " (" + "; ".join(extra) + ")"
                 lines.append(f"- {line}")
@@ -171,7 +179,13 @@ class GoalSpec(BaseModel):
             return rendered
 
         # If too long, drop examples implicitly (we never render them) and truncate.
-        return rendered[: max_chars - 1].rstrip() + "…\n"
+        suffix = "…\n"
+        if max_chars <= 0:
+            return ""
+        if max_chars <= len(suffix):
+            return suffix[:max_chars]
+        cut = max_chars - len(suffix)
+        return rendered[:cut].rstrip() + suffix
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-serializable metadata representation."""
