@@ -192,10 +192,13 @@ class Evaluator:
             mode=config.mode.value,
             goal_guided=bool(goal_prompt),
             query_goals=(
-                goal_spec if goal_spec is not None and not goal_spec.is_empty() else None
+                goal_spec
+                if goal_spec is not None and not goal_spec.is_empty()
+                else None
             ),
         )
 
+        q: GeneratedQuery
         async for q in query_gen.generate(
             self._aiter_tuples(tuples), effective_context
         ):

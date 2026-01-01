@@ -70,8 +70,9 @@ class CrossProductTupleGenerator:
 
         # No dimensions: exactly one empty combination.
         if not field_names:
-            if count <= 0 or count >= 1:
-                yield GeneratedTuple(values={})
+            # The cartesian product over an empty set of dimensions is a single empty tuple.
+            # This mirrors the behavior below where `count <= 0` means "no limit".
+            yield GeneratedTuple(values={})
             return
 
         # If any dimension has zero values, there are no combinations.
