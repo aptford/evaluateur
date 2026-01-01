@@ -46,15 +46,12 @@ class LLMClient:
     provider: str
     model_name: str
     _instructor_client: Any
-    _dspy_lm: Any | None = None
 
     @classmethod
     def from_env(
         cls,
         provider: str = "openai",
         model_name: str | None = None,
-        *,
-        dspy_lm: Any | None = None,
     ) -> LLMClient:
         """Create an ``LLMClient`` using environment variables.
 
@@ -68,10 +65,6 @@ class LLMClient:
         model_name
             The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
             or "gpt-4o-mini".
-        dspy_lm
-            Optional pre-configured DSPy language model. Evaluateur does not
-            import or initialize DSPy at import-time; if you use DSPy features
-            and do not provide this, a default will be created lazily.
 
         Returns
         -------
@@ -91,7 +84,6 @@ class LLMClient:
             provider=provider,
             model_name=model,
             _instructor_client=inst_client,
-            _dspy_lm=dspy_lm,
         )
 
     @classmethod
@@ -101,7 +93,6 @@ class LLMClient:
         model_name: str | None = None,
         *,
         provider: str = "openai",
-        dspy_lm: Any | None = None,
         **instructor_kwargs: Any,
     ) -> LLMClient:
         """Create an ``LLMClient`` from a custom AsyncOpenAI client.
@@ -118,8 +109,6 @@ class LLMClient:
             or "gpt-4o-mini".
         provider
             Provider identifier for metadata purposes. Defaults to "openai".
-        dspy_lm
-            Optional pre-configured DSPy language model.
         **instructor_kwargs
             Additional keyword arguments passed to ``instructor.from_openai()``.
 
@@ -152,7 +141,6 @@ class LLMClient:
             provider=provider,
             model_name=model,
             _instructor_client=inst_client,
-            _dspy_lm=dspy_lm,
         )
 
     @classmethod
@@ -162,7 +150,6 @@ class LLMClient:
         model_name: str | None = None,
         *,
         provider: str = "openai",
-        dspy_lm: Any | None = None,
     ) -> LLMClient:
         """Create an ``LLMClient`` from a pre-configured async Instructor client.
 
@@ -179,8 +166,6 @@ class LLMClient:
             ``EVALUATEUR_MODEL_NAME`` env var or "gpt-4o-mini".
         provider
             Provider identifier for metadata purposes. Defaults to "openai".
-        dspy_lm
-            Optional pre-configured DSPy language model.
 
         Returns
         -------
@@ -203,15 +188,9 @@ class LLMClient:
             provider=provider,
             model_name=model,
             _instructor_client=instructor_client,
-            _dspy_lm=dspy_lm,
         )
 
     @property
     def instructor_client(self) -> Any:
         """Return the async Instructor client."""
         return self._instructor_client
-
-    @property
-    def dspy_lm(self) -> Any | None:
-        """Return the DSPy language model, if configured."""
-        return self._dspy_lm

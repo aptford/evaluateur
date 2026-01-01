@@ -1,6 +1,6 @@
 [project]
 name = "evaluateur"
-version = "0.1.0"
+version = "0.2.0"
 description = "synthetic evals for agents"
 readme = "README.md"
 authors = [{ name = "Sasha Aptlin", email = "sasha@aptford.com" }]
@@ -13,9 +13,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dspy = [
-    "dspy>=3.0.4",
-]
 
 [build-system]
 requires = ["uv_build>=0.8.9,<0.9.0"]

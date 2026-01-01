@@ -57,12 +57,8 @@ class GoalSpec(BaseModel):
 
     This mirrors the Components / Trajectories / Outcomes framework.
 
-    The spec is used in two ways:
-
-    1) **Per-run prompt conditioning**: we render it to a short instruction block
-       and attach it to the query-generation context.
-    2) **Compile-time optimization**: a DSPy teleprompter can use it as a rubric
-       to score candidate prompts/few-shot selections.
+    The spec is used for **per-run prompt conditioning**: we render it to a short
+    instruction block and attach it to the query-generation context.
     """
 
     title: str | None = Field(default=None, description="Optional name for this spec")

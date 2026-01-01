@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import builtins
-import importlib
-import sys
 from typing import List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel, Field
@@ -162,29 +159,6 @@ async def test_cross_product_does_not_materialize_full_space() -> None:
     assert len(tuples) == 1
     assert 0 <= int(tuples[0].values["a"]) < 10_000
     assert 0 <= int(tuples[0].values["b"]) < 10_000
-
-
-def test_importing_queries_does_not_require_dspy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Importing the library should not import DSPy implicitly."""
-
-    real_import = builtins.__import__
-
-    def guarded_import(name: str, *args, **kwargs):
-        if name == "dspy" or name.startswith("dspy."):
-            raise ImportError("blocked dspy import for test")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", guarded_import)
-    sys.modules.pop("evaluateur.generators.queries", None)
-
-    mod = importlib.import_module("evaluateur.generators.queries")
-    assert hasattr(mod, "QueryMode")
-    assert hasattr(mod, "InstructorQueryGenerator")
-
-    # Accessing the symbol is fine; instantiation should fail with a clear error.
-    DSpyQueryGenerator = getattr(mod, "DSpyQueryGenerator")
-    with pytest.raises(RuntimeError, match="DSPy is not installed"):
-        DSpyQueryGenerator(MagicMock())
 
 
 async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None:

@@ -36,7 +36,7 @@ class QueryMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     # Run-level fields (injected by Evaluator.queries)
-    mode: Literal["instructor", "dspy", "hybrid"] | None = None
+    mode: Literal["instructor"] | None = None
     goal_guided: bool = False
     query_goals: dict[str, Any] | None = None
 

@@ -698,41 +698,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dspy"
-version = "3.0.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "asyncer" },
-    { name = "backoff" },
-    { name = "cachetools" },
-    { name = "cloudpickle" },
-    { name = "diskcache" },
-    { name = "gepa" },
-    { name = "joblib" },
-    { name = "json-repair" },
-    { name = "litellm" },
-    { name = "magicattr" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "openai" },
-    { name = "optuna" },
-    { name = "orjson" },
-    { name = "pillow" },
-    { name = "pydantic" },
-    { name = "regex" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "tenacity" },
-    { name = "tqdm" },
-    { name = "xxhash" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8e/18/0042d299cd5e85fdb381568f0cfcc7769122e8f70ea0a2d33e12fd63e705/dspy-3.0.4.tar.gz", hash = "sha256:cb4529df9a91353a16144d9d94ba6ff25f36fc5adfd921f127f4c49d0e309fb8", size = 236376, upload-time = "2025-11-10T17:43:37.619Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/52/56eed4828175f48f712a50a994293065afa7cc98cb112992a0b071179b6c/dspy-3.0.4-py3-none-any.whl", hash = "sha256:c0a88c7936f41f6f613ee6ca8cd92e63746ff2bd780e3896615ade7628eb6a6a", size = 285224, upload-time = "2025-11-10T17:43:36.263Z" },
-]
-
-[[package]]
 name = "evaluateur"
 version = "0.1.0"
 source = { editable = "." }
@@ -740,11 +705,6 @@ dependencies = [
     { name = "instructor" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-]
-
-[package.optional-dependencies]
-dspy = [
-    { name = "dspy" },
 ]
 
 [package.dev-dependencies]
@@ -756,12 +716,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dspy", marker = "extra == 'dspy'", specifier = ">=3.0.4" },
     { name = "instructor", specifier = ">=1.13.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
-provides-extras = ["dspy"]
 
 [package.metadata.requires-dev]
 dev = [

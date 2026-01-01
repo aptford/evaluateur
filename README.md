@@ -11,17 +11,6 @@ The project is packaged as a normal Python library. With `uv`:
 uv add evaluateur
 ```
 
-DSPy support is optional. If you want to use `QueryMode.DSPY` or DSPy refinement in
-`QueryMode.HYBRID`, install the extra:
-
-```bash
-uv add "evaluateur[dspy]"
-```
-
-Note: Evaluateur keeps DSPy as a true optional dependency. Importing `evaluateur`
-does not import DSPy; DSPy is only imported when you use `QueryMode.DSPY`,
-`QueryMode.HYBRID`, or DSPy-backed optimization.
-
 ### Basic usage
 
 Define a Pydantic model that represents the dimensions of your evaluation
@@ -56,7 +45,7 @@ async def main() -> None:
     async for q in evaluator.run(
         options=options,
         tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
-        query_config=QueryConfig(mode=QueryMode.HYBRID),
+        query_config=QueryConfig(mode=QueryMode.INSTRUCTOR),
     ):
         print(q.source_tuple.values, "->", q.query)
 
@@ -89,34 +78,7 @@ combinations when the space is large.
 You can guide query generation using the three-layer framework by providing a
 `GoalSpec` (structured) or free-form text (which is normalized into a `GoalSpec`).
 
-The goals are used in two ways:
-
-- Queries are **conditioned per run** on your goals (so you can iterate quickly).
-- In DSPy/HYBRID modes you can also enable **compile-time optimization** with a
-  goal-aware DSPy optimizer.
-
-#### Which DSPy optimizer is used?
-
-When compile-time optimization is enabled, Evaluateur uses **GEPA by default** (it tends to outperform MiProV2, but can cost more because it does reflective optimization).
-
-- **GEPA**: best quality in many cases, but usually slower and more expensive.
-- **MiProV2**: often faster/cheaper, and a good baseline when you want quick iteration.
-
-To force MiProV2:
-
-```python
-QueryConfig(
-    mode=QueryMode.DSPY,
-    dspy=DSpyConfig(
-        optimize=True,
-        optimizer_name="miprov2",
-        trainset=[...],  # required for optimization
-        # valset=[...],  # optional
-    ),
-)
-```
-
-Note: compile-time optimization only runs when you provide a `trainset` and/or `valset`. If you omit both, Evaluateur will skip compilation and just run the base DSPy module.
+Goals are used to **condition queries per run**, so you can iterate quickly.
 
 Structured goals:
 
@@ -124,7 +86,7 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import DSpyConfig, Evaluator, GoalItem, GoalLayer, GoalSpec, JudgeBackend, QueryConfig, QueryMode
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryConfig, QueryMode
 
 
 class Query(BaseModel):
@@ -173,11 +135,7 @@ async def main() -> None:
 
     async for q in evaluator.run(
         query_config=QueryConfig(
-            mode=QueryMode.DSPY,
-            dspy=DSpyConfig(
-                goal_guided=True,
-                judge_backend=JudgeBackend.LLM,  # use HEURISTIC for offline tests
-            ),
+            mode=QueryMode.INSTRUCTOR,
         ),
         goals=goals,
     ):
@@ -194,7 +152,7 @@ Free-form goals (normalized with Instructor):
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import DSpyConfig, Evaluator, QueryConfig, QueryMode
+from evaluateur import Evaluator, QueryConfig, QueryMode
 
 
 class Query(BaseModel):
@@ -210,8 +168,7 @@ async def main() -> None:
     i = 0
     async for q in evaluator.run(
         query_config=QueryConfig(
-            mode=QueryMode.DSPY,
-            dspy=DSpyConfig(goal_guided=True),
+            mode=QueryMode.INSTRUCTOR,
         ),
         goals="""
 Components: force freshness (effective date, latest policy) and grounded citations.

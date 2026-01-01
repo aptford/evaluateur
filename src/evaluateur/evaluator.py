@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence, Type, TypeVar
+from typing import Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -12,7 +12,6 @@ from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
 from evaluateur.generators.query.context import compose_context
 from evaluateur.goals import GoalSpec
 from evaluateur.generators.queries import (
-    DSpyOptimizer,
     InstructorQueryGenerator,
     QueryGenerator,
 )
@@ -22,7 +21,6 @@ from evaluateur.generators.tuples import (
     TupleGenerator,
 )
 from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
-from evaluateur.optimizers import GoalGuidedQueryOptimizer, JudgeBackend
 
 log = logging.getLogger(__name__)
 
@@ -39,28 +37,10 @@ class TupleConfig:
 
 
 @dataclass(frozen=True)
-class DSpyConfig:
-    """Configuration for DSPy-based query generation."""
-
-    optimize: bool = False
-    # Which implicit DSPy optimizer to use when `optimize=True` (or when goal-guided
-    # optimization auto-creates an optimizer). Defaults to GEPA.
-    optimizer_name: Literal["gepa", "miprov2"] = "gepa"
-    optimizer: DSpyOptimizer | None = None
-    trainset: Sequence[Any] | None = None
-    valset: Sequence[Any] | None = None
-
-    # Goal-guided compile-time optimization (when no explicit optimizer is provided).
-    goal_guided: bool = False
-    judge_backend: JudgeBackend = JudgeBackend.LLM
-
-
-@dataclass(frozen=True)
 class QueryConfig:
     """Configuration for query generation."""
 
     mode: QueryMode = QueryMode.INSTRUCTOR
-    dspy: DSpyConfig | None = None
 
 
 class Evaluator:
@@ -122,31 +102,10 @@ class Evaluator:
     def _build_query_generator(
         self,
         mode: QueryMode,
-        *,
-        optimize_dspy: bool,
-        dspy_optimizer_name: Literal["gepa", "miprov2"],
-        dspy_optimizer: DSpyOptimizer | None,
-        dspy_trainset: Sequence[Any] | None,
-        dspy_valset: Sequence[Any] | None,
     ) -> QueryGenerator:
         """Build a query generator based on the specified mode."""
         if mode == QueryMode.INSTRUCTOR:
             return InstructorQueryGenerator(self.client)
-        if mode == QueryMode.DSPY:
-            from evaluateur.generators.queries import DSpyQueryGenerator
-
-            return DSpyQueryGenerator(
-                self.client,
-                optimize=optimize_dspy,
-                optimizer_name=dspy_optimizer_name,
-                optimizer=dspy_optimizer,
-                trainset=dspy_trainset,
-                valset=dspy_valset,
-            )
-        if mode == QueryMode.HYBRID:
-            from evaluateur.generators.queries import HybridQueryGenerator
-
-            return HybridQueryGenerator(self.client)
         raise ValueError(f"Unsupported query mode: {mode}")
 
     async def _ensure_options(self, maybe_options: BaseModel | None) -> BaseModel:
@@ -201,36 +160,6 @@ class Evaluator:
             return None, None
         return spec, spec.render_prompt()
 
-    def _resolve_dspy_optimizer(
-        self,
-        dspy: DSpyConfig,
-        *,
-        mode: QueryMode,
-        goal_spec: GoalSpec | None,
-        goal_prompt: str | None,
-    ) -> tuple[DSpyOptimizer | None, GoalSpec | None, str | None]:
-        resolved_goal_spec = goal_spec
-        resolved_goal_prompt = goal_prompt
-        resolved_optimizer = dspy.optimizer
-
-        if (
-            resolved_optimizer is None
-            and dspy.goal_guided
-            and mode in (QueryMode.DSPY, QueryMode.HYBRID)
-        ):
-            if resolved_goal_spec is None:
-                resolved_goal_spec = GoalSpec(
-                    title="Goal-guided (no explicit goals provided)"
-                )
-                resolved_goal_prompt = resolved_goal_spec.render_prompt()
-            resolved_optimizer = GoalGuidedQueryOptimizer(
-                goal_spec=resolved_goal_spec,
-                judge_backend=dspy.judge_backend,
-                optimizer_name=dspy.optimizer_name,
-            )
-
-        return resolved_optimizer, resolved_goal_spec, resolved_goal_prompt
-
     async def _aiter_tuples(
         self, tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple]
     ) -> AsyncIterator[GeneratedTuple]:
@@ -255,24 +184,9 @@ class Evaluator:
         )
 
         goal_spec, goal_prompt = await self._normalize_goals(goals)
-
-        dspy_cfg = config.dspy or DSpyConfig()
-        resolved_optimizer, goal_spec, goal_prompt = self._resolve_dspy_optimizer(
-            dspy_cfg,
-            mode=config.mode,
-            goal_spec=goal_spec,
-            goal_prompt=goal_prompt,
-        )
         effective_context = compose_context(self.context, goal_prompt)
 
-        query_gen = self._build_query_generator(
-            config.mode,
-            optimize_dspy=dspy_cfg.optimize,
-            dspy_optimizer_name=dspy_cfg.optimizer_name,
-            dspy_optimizer=resolved_optimizer,
-            dspy_trainset=dspy_cfg.trainset,
-            dspy_valset=dspy_cfg.valset,
-        )
+        query_gen = self._build_query_generator(config.mode)
 
         run_metadata = QueryMetadata(
             mode=config.mode.value,
@@ -288,8 +202,10 @@ class Evaluator:
             self._aiter_tuples(tuples), effective_context
         ):
             merged = {
-                **q.metadata.model_dump(),
+                # Run metadata provides defaults; per-query metadata should win
+                # (e.g. generator may set refined=True).
                 **run_metadata.model_dump(exclude_none=True),
+                **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
             }
             yield GeneratedQuery(
                 query=q.query,
