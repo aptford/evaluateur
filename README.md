@@ -1,9 +1,9 @@
-## Evaluateur
+# Evaluateur
 
 Synthetic evaluation helper for LLM applications, built around the
 **dimensions → tuples → queries** flow described in [Hamel Husain's FAQ](https://hamel.dev/blog/posts/evals-faq/what-is-the-best-approach-for-generating-synthetic-data.html).
 
-### Installation
+## Installation
 
 The project is packaged as a normal Python library. With `uv`:
 
@@ -11,7 +11,7 @@ The project is packaged as a normal Python library. With `uv`:
 uv add evaluateur
 ```
 
-### Basic usage
+## Basic usage
 
 Define a Pydantic model that represents the dimensions of your evaluation
 space, then use the `Evaluator` to generate options and queries:
@@ -63,7 +63,7 @@ options and are not modified by `generate_options()`. Scalar fields of any
 basic type (`str`, `int`, `float`, and so on) are turned into lists of
 options automatically.
 
-### Tuple generation: seeded sampling for cross product
+## Tuple generation: seeded sampling for cross product
 
 When `TupleStrategy.CROSS_PRODUCT` is used and `0 < count < total_combinations`,
 Evaluateur returns a **seeded randomized sample** of the cartesian product
@@ -73,7 +73,7 @@ combinations when the space is large.
 - To get reproducible results, set `TupleConfig(seed=...)`.
 - Changing the seed gives you a different randomized subset.
 
-### Goal-guided query optimization (Components / Trajectories / Outcomes)
+## Goal-guided query optimization (Components / Trajectories / Outcomes)
 
 You can guide query generation using the three-layer framework by providing a
 `GoalSpec` (structured) or free-form text (which is normalized into a `GoalSpec`).
@@ -171,9 +171,9 @@ async def main() -> None:
             mode=QueryMode.INSTRUCTOR,
         ),
         goals="""
-Components: force freshness (effective date, latest policy) and grounded citations.
-Trajectories: include conflicting evidence and require resolving or escalating.
-Outcomes: short, checklist-friendly queries that reveal missing inputs.
+Components: prioritize freshness checks, grounded citations, and missing-source detection (don’t proceed silently).
+Trajectories: include conflict handling and recovery behavior (re-try, switch tools, or escalate when evidence conflicts).
+Outcomes: produce checklist-ready outputs that are easy to review and hard to misuse.
 """,
     ):
         print(q.query)

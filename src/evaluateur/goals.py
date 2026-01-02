@@ -53,13 +53,7 @@ class GoalLayer(BaseModel):
 
 
 class GoalSpec(BaseModel):
-    """User-provided guidance for shaping evaluation queries.
-
-    This mirrors the Components / Trajectories / Outcomes framework.
-
-    The spec is used for **per-run prompt conditioning**: we render it to a short
-    instruction block and attach it to the query-generation context.
-    """
+    """User-provided guidance for shaping evaluation queries."""
 
     title: str | None = Field(default=None, description="Optional name for this spec")
 
@@ -79,18 +73,54 @@ class GoalSpec(BaseModel):
             return cls()
 
         system = (
-            "You convert user intent into a structured goal specification for generating "
-            "synthetic evaluation queries. Extract goals across three layers: components, "
-            "trajectories, outcomes.\n\n"
-            "Rules:\n"
-            "- Keep goals actionable and test-oriented (what should a query force the system to do?).\n"
-            "- Prefer short 'must_include' checklist tokens when possible.\n"
-            "- Use weights to represent relative priority (default 1.0).\n"
-            "- If the user is ambiguous, make reasonable assumptions and keep them in 'summary'.\n"
+            "You convert free-form user guidance into a structured GoalSpec used to generate "
+            "synthetic evaluation queries.\n\n"
+            "Framework (three layers to target):\n"
+            "- Components: individual building blocks (retrieval, tool calls, extraction, "
+            "grounding/citations). These are unit-test style checks.\n"
+            "- Trajectories: the sequence of decisions and recovery behavior (tool choice, order, "
+            "retries, detecting staleness/missing info, handling conflicts, escalation).\n"
+            "- Outcomes: what ships to users (task completion, checklist compliance, UX constraints, "
+            "reliability under change).\n\n"
+            "Critical constraint: this GoalSpec conditions QUERY GENERATION. The goals should be "
+            "written so they can guide a query generator to produce queries that stress-test the "
+            "target system.\n\n"
+            "Primary output preference:\n"
+            "- Prefer rich, explicit GoalItem.description over must_include/avoid.\n"
+            "- Populate GoalItem.examples with concrete example user queries.\n\n"
+            "Mapping rules (be concrete):\n"
+            "- Each layer should contain a small number of GoalItems (typically 1–5).\n"
+            "- For each GoalItem:\n"
+            "  - name: short label.\n"
+            "  - description: 2–5 sentences describing what the generated user query should stress, "
+            "what failure mode it targets, and what a good response behavior would look like.\n"
+            "  - examples: 1–3 fully-formed, natural-language example user queries that would "
+            "satisfy this goal.\n"
+            "  - must_include/avoid: use only when the user explicitly asks for specific phrases or "
+            "when a literal checklist token is essential; otherwise leave them empty.\n"
+            "- Put assumptions / ambiguity handling in the layer summary.\n\n"
+            "What good goals look like (test-oriented):\n"
+            "- Freshness/staleness: force checking effective dates / most recent versions.\n"
+            "- Coverage gaps: force detecting missing required sources and saying \"not found\".\n"
+            "- Tool semantics: force preferring authoritative sources/tools over generic web search.\n"
+            "- Conflicts: force detecting conflicting evidence and reconciling or escalating.\n"
+            "- Escalation/uncertainty: force asking for confirmation or flagging uncertainty.\n"
+            "- Outcome constraints: force checklist-ready, workflow-usable outputs.\n\n"
+            "Output constraints (GPT-5.2 best practices):\n"
+            "- Be specific and test-oriented; avoid vague statements like \"be high quality\".\n"
+            "- If guidance is broad, infer reasonable goals across ALL THREE layers.\n"
+            "- Use weight (default 1.0) to reflect priority; set 0.0 to disable goals.\n"
+            "- Do not invent domain facts; do not introduce new requirements unrelated to the input.\n"
         )
 
         user = (
-            "Turn the following user guidance into a GoalSpec.\n\n"
+            "Turn the following guidance into a GoalSpec.\n\n"
+            "Important:\n"
+            "- Prefer verbose GoalItem.description.\n"
+            "- Include 1–3 GoalItem.examples per goal (example user queries).\n"
+            "- Use must_include/avoid only if explicitly requested or clearly necessary.\n"
+            "- If the guidance is broad, infer actionable goals in components, trajectories, and "
+            "outcomes.\n\n"
             "User guidance:\n"
             f"{cleaned}"
         )
@@ -121,7 +151,7 @@ class GoalSpec(BaseModel):
             )
         )
 
-    def render_prompt(self, *, max_chars: int = 1800) -> str:
+    def render_prompt(self, *, max_chars: int = 5000) -> str:
         """Render this spec into a compact instruction block.
 
         The output is designed to be appended to the evaluator's domain context.
