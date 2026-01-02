@@ -121,7 +121,10 @@ class TestEvaluatorGenerateTuples:
 
         tuples = [
             t
-            async for t in evaluator.tuples(options, config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=2))
+            async for t in evaluator.tuples(
+                options,
+                config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=2),
+            )
         ]
 
         assert len(tuples) == 2
@@ -175,14 +178,15 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
                 )
 
     goals = GoalSpec(
-        title="test goals",
         components=GoalLayer(items=[GoalItem(name="force payer")]),
     )
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
     t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
 
-    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+    with patch.object(
+        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    ):
         results = [
             q
             async for q in evaluator.queries(
@@ -220,8 +224,13 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
 
-    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
-        _ = [q async for q in evaluator.queries(tuples=[t1], instructions="Keep it short.")]
+    with patch.object(
+        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        _ = [
+            q
+            async for q in evaluator.queries(tuples=[t1], instructions="Keep it short.")
+        ]
 
     assert len(captured) == 1
     assert "Test context" in captured[0]
@@ -239,7 +248,6 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        title="test goals",
         components=GoalLayer(items=[GoalItem(name="c")]),
         trajectories=GoalLayer(items=[GoalItem(name="t")]),
         outcomes=GoalLayer(items=[GoalItem(name="o")]),
@@ -248,7 +256,9 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
     t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
 
-    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+    with patch.object(
+        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    ):
         results = [
             q
             async for q in evaluator.queries(
@@ -260,8 +270,16 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
 
     assert len(results) == 2
     assert results[0].metadata.goal_mode == "sample"
-    assert results[0].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}
-    assert results[1].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}
+    assert results[0].metadata.goal_focus_area in {
+        "components",
+        "trajectories",
+        "outcomes",
+    }
+    assert results[1].metadata.goal_focus_area in {
+        "components",
+        "trajectories",
+        "outcomes",
+    }
 
 
 async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None:
@@ -278,13 +296,14 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
     # Ensure the goal prompt is long enough to require truncation.
     long_summary = "x" * 10_000
     goals = GoalSpec(
-        title="test goals",
         components=GoalLayer(summary=long_summary, items=[GoalItem(name="c")]),
     )
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
 
-    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+    with patch.object(
+        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    ):
         _ = [
             q
             async for q in evaluator.queries(
