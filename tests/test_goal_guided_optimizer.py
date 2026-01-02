@@ -5,7 +5,6 @@ from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 
 def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
     spec = GoalSpec(
-        title="Test",
         components=GoalLayer(
             summary="Focus on freshness and grounding.",
             items=[
@@ -47,7 +46,6 @@ def test_goal_spec_is_empty_when_no_goals() -> None:
 def test_goal_spec_render_prompt_truncation_respects_max_chars() -> None:
     # Make a prompt that will definitely exceed the max.
     spec = GoalSpec(
-        title="T",
         components=GoalLayer(
             summary=("x" * 500),
             items=[GoalItem(name="n", must_include=["a" * 200])],
