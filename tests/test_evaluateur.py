@@ -188,8 +188,8 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
     t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
 
-    with patch.object(
-        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
     ):
         results = [
             q
@@ -230,8 +230,8 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
 
-    with patch.object(
-        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
     ):
         _ = [
             q
@@ -267,8 +267,8 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
         for _ in range(200)
     ]
 
-    with patch.object(
-        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
     ):
         results = [
             q
@@ -315,8 +315,8 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
         for _ in range(200)
     ]
 
-    with patch.object(
-        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
     ):
         results = [
             q
@@ -363,8 +363,8 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
 
-    with patch.object(
-        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
     ):
         _ = [
             q

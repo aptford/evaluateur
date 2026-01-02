@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import random
 from collections.abc import AsyncIterator, Sequence
 from typing import Type, TypeVar
@@ -10,19 +9,19 @@ from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
 from evaluateur.configs import QueryConfig, TupleConfig
-from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
+from evaluateur.generators import OptionsGenerator
 from evaluateur.generators.query.context import compose_query_context
 from evaluateur.goals import GoalFocusArea, GoalSpec
-from evaluateur.generators.queries import (
-    InstructorQueryGenerator,
-    QueryGenerator,
-)
-from evaluateur.generators.tuples import (
-    CrossProductTupleGenerator,
-    DirectLLMTupleGenerator,
-    TupleGenerator,
-)
 from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
+from evaluateur._internal.async_iter import to_async_iterator
+from evaluateur._internal.evaluator_factories import (
+    build_query_generator,
+    build_tuple_generator,
+)
+from evaluateur._internal.evaluator_goal_guidance import (
+    GoalSamplingContextBuilder,
+    normalize_goal_spec,
+)
 
 log = logging.getLogger(__name__)
 
@@ -77,23 +76,6 @@ class Evaluator:
         log.debug("Generated options: %s", result)
         return result
 
-    def _build_tuple_generator(self, strategy: TupleStrategy) -> TupleGenerator:
-        """Build a tuple generator based on the specified strategy."""
-        if strategy == TupleStrategy.CROSS_PRODUCT:
-            return CrossProductTupleGenerator(client=self.client)
-        if strategy == TupleStrategy.DIRECT_LLM:
-            return DirectLLMTupleGenerator(client=self.client)
-        raise ValueError(f"Unsupported tuple strategy: {strategy}")
-
-    def _build_query_generator(
-        self,
-        mode: QueryMode,
-    ) -> QueryGenerator:
-        """Build a query generator based on the specified mode."""
-        if mode == QueryMode.INSTRUCTOR:
-            return InstructorQueryGenerator(self.client)
-        raise ValueError(f"Unsupported query mode: {mode}")
-
     async def _ensure_options(
         self, maybe_options: BaseModel | None, *, instructions: str | None = None
     ) -> BaseModel:
@@ -121,7 +103,7 @@ class Evaluator:
         options_instance = await self._ensure_options(options)
         log.debug("Using options: %s", options_instance)
 
-        tuple_gen = self._build_tuple_generator(config.strategy)
+        tuple_gen = build_tuple_generator(client=self.client, strategy=config.strategy)
         generated_count = 0
 
         async for t in tuple_gen.generate(
@@ -131,30 +113,6 @@ class Evaluator:
             yield t
 
         log.info("Generated %d tuples", generated_count)
-
-    async def _normalize_goals(self, goals: GoalSpec | str | None) -> GoalSpec | None:
-        if goals is None:
-            return None
-        if isinstance(goals, str):
-            spec = await GoalSpec.from_text(self.client, goals)
-        elif isinstance(goals, GoalSpec):
-            spec = goals
-        else:  # pragma: no cover - defensive
-            raise TypeError("goals must be a GoalSpec, a string, or None")
-
-        if spec.is_empty():
-            return None
-        return spec
-
-    async def _aiter_tuples(
-        self, tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple]
-    ) -> AsyncIterator[GeneratedTuple]:
-        if hasattr(tuples, "__aiter__"):
-            async for t in tuples:  # type: ignore[misc]
-                yield t
-            return
-        for t in tuples:
-            yield t
 
     async def queries(
         self,
@@ -170,9 +128,9 @@ class Evaluator:
             "streaming" if hasattr(tuples, "__aiter__") else len(tuples),  # type: ignore[arg-type]
         )
 
-        query_gen = self._build_query_generator(config.mode)
+        query_gen = build_query_generator(client=self.client, mode=config.mode)
 
-        goal_spec = await self._normalize_goals(goals)
+        goal_spec = await normalize_goal_spec(self.client, goals)
         focus_areas: list[GoalFocusArea] = (
             goal_spec.available_focus_areas() if goal_spec is not None else []
         )
@@ -199,94 +157,26 @@ class Evaluator:
         q: GeneratedQuery
         if config.goal_mode == "sample" and goal_spec is not None and focus_areas:
             rng = random.Random(config.goal_seed)
-
-            def _layer_weight(layer: object) -> float:
-                """Compute the effective sampling weight for a goal layer.
-
-                Rules:
-                - Sum all GoalItem.weight values where weight > 0.
-                - If there are no positive-weight items but the layer has a non-empty
-                  summary, default to weight 1.0 (so summaries can still be sampled).
-                - Otherwise treat the layer as weight 0 (ineligible).
-                """
-
-                # GoalLayer has .items (list[GoalItem]) and .summary (str | None).
-                items = getattr(layer, "items", None)
-                if items:
-                    total = math.fsum(
-                        float(it.weight) for it in items if float(it.weight) > 0.0
-                    )
-                    if total > 0.0:
-                        return total
-
-                summary = getattr(layer, "summary", None)
-                if isinstance(summary, str) and summary.strip():
-                    return 1.0
-                return 0.0
-
-            def _focus_weight(focus: GoalFocusArea) -> float:
-                if focus == "components":
-                    return _layer_weight(goal_spec.components)
-                if focus == "trajectories":
-                    return _layer_weight(goal_spec.trajectories)
-                return _layer_weight(goal_spec.outcomes)
-
-            weighted_focus_areas: list[tuple[GoalFocusArea, float]] = []
-            for focus in focus_areas:
-                w = _focus_weight(focus)
-                if w > 0.0:
-                    weighted_focus_areas.append((focus, w))
-
-            def _choose_focus_area() -> GoalFocusArea:
-                """Choose a focus area using numerically-stable weighted sampling."""
-
-                # Defensive fallback: if all weights are effectively 0, fall back to
-                # uniform sampling across eligible focus areas.
-                if not weighted_focus_areas:
-                    return rng.choice(focus_areas)
-
-                max_w = max(w for _, w in weighted_focus_areas)
-                if not (max_w > 0.0) or not math.isfinite(max_w):
-                    return rng.choice(focus_areas)
-
-                scaled = [w / max_w for _, w in weighted_focus_areas]
-                total = math.fsum(scaled)
-                if not (total > 0.0) or not math.isfinite(total):
-                    return rng.choice(focus_areas)
-
-                r = rng.random() * total
-                acc = 0.0
-                for (focus, _), s in zip(weighted_focus_areas, scaled, strict=True):
-                    acc += s
-                    if r < acc:
-                        return focus
-                # Floating-point edge case: return the last focus area.
-                return weighted_focus_areas[-1][0]
-
-            def _context_builder(
-                t: GeneratedTuple,
-            ) -> tuple[str, dict[str, object]]:
-                focus = _choose_focus_area()
-                focus_prompt = goal_spec.render_focused_prompt(
-                    focus_area=focus,
-                    max_chars=config.max_chars_for_goals,
-                )
-                ctx = compose_query_context(base_context, goal_prompt=focus_prompt)
-                return ctx, {"goal_focus_area": focus}
+            context_builder = GoalSamplingContextBuilder(
+                base_context=base_context,
+                goal_spec=goal_spec,
+                focus_areas=focus_areas,
+                rng=rng,
+                max_chars_for_goals=config.max_chars_for_goals,
+            )
 
             async for q in query_gen.generate(
-                self._aiter_tuples(tuples),
+                to_async_iterator(tuples),
                 base_context,
-                context_builder=_context_builder,
+                context_builder=context_builder,
             ):
-                merged = {
-                    **run_metadata.model_dump(exclude_none=True),
-                    **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
-                }
                 yield GeneratedQuery(
                     query=q.query,
                     source_tuple=q.source_tuple,
-                    metadata=QueryMetadata.model_validate(merged),
+                    metadata=QueryMetadata.merge(
+                        run_metadata=run_metadata,
+                        per_query_metadata=q.metadata,
+                    ),
                 )
             return
 
@@ -297,19 +187,14 @@ class Evaluator:
 
         effective_context = compose_query_context(base_context, goal_prompt=goal_prompt)
 
-        async for q in query_gen.generate(
-            self._aiter_tuples(tuples), effective_context
-        ):
-            merged = {
-                # Run metadata provides defaults; per-query metadata should win
-                # (e.g. generator may attach tracing keys).
-                **run_metadata.model_dump(exclude_none=True),
-                **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
-            }
+        async for q in query_gen.generate(to_async_iterator(tuples), effective_context):
             yield GeneratedQuery(
                 query=q.query,
                 source_tuple=q.source_tuple,
-                metadata=QueryMetadata.model_validate(merged),
+                metadata=QueryMetadata.merge(
+                    run_metadata=run_metadata,
+                    per_query_metadata=q.metadata,
+                ),
             )
 
     async def run(

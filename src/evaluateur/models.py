@@ -43,6 +43,24 @@ class QueryMetadata(BaseModel):
     goal_mode: GoalMode | None = None
     goal_focus_area: GoalFocusArea | None = None
 
+    @classmethod
+    def merge(
+        cls,
+        *,
+        run_metadata: QueryMetadata,
+        per_query_metadata: QueryMetadata,
+    ) -> QueryMetadata:
+        """Merge evaluator run metadata with per-query metadata.
+
+        Run metadata provides defaults; per-query metadata wins on conflicts.
+        """
+
+        merged = {
+            **run_metadata.model_dump(exclude_none=True),
+            **per_query_metadata.model_dump(exclude_none=True, exclude_unset=True),
+        }
+        return cls.model_validate(merged)
+
 
 class GeneratedQuery(BaseModel):
     """Natural language query with full traceability back to its tuple."""
