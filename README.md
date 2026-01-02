@@ -87,6 +87,11 @@ You can guide query generation using the three-layer framework by providing a
 Goals are used to **condition queries per run**, so you can iterate quickly.
 If you provide `GoalItem.examples`, they are included in the internal goal prompt passed to the query generator.
 
+When you pass **free-form text** for `goals`, Evaluateur will ask an LLM to convert it into a structured
+`GoalSpec`. For best results, include concrete example user questions and any measurable acceptance criteria
+(e.g. “cite policy section,” “ask a clarifying question if payer is missing,” “return a checklist”). This helps
+produce low-overlap goals across components vs trajectories vs outcomes.
+
 ### Sampling goals per query (diversity mode)
 
 By default, Evaluateur picks a single focus area
