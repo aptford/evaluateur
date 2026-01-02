@@ -257,13 +257,15 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="c")]),
-        trajectories=GoalLayer(items=[GoalItem(name="t")]),
-        outcomes=GoalLayer(items=[GoalItem(name="o")]),
+        components=GoalLayer(items=[GoalItem(name="c", weight=1000.0)]),
+        trajectories=GoalLayer(items=[GoalItem(name="t", weight=1.0)]),
+        outcomes=GoalLayer(items=[GoalItem(name="o", weight=1.0)]),
     )
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
-    t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
+    tuples = [
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+        for _ in range(200)
+    ]
 
     with patch.object(
         evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
@@ -271,24 +273,71 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
         results = [
             q
             async for q in evaluator.queries(
-                tuples=[t1, t2],
+                tuples=tuples,
                 goals=goals,
                 config=QueryConfig(goal_mode="sample", goal_seed=123),
             )
         ]
 
-    assert len(results) == 2
-    assert results[0].metadata.goal_mode == "sample"
-    assert results[0].metadata.goal_focus_area in {
-        "components",
-        "trajectories",
-        "outcomes",
-    }
-    assert results[1].metadata.goal_focus_area in {
-        "components",
-        "trajectories",
-        "outcomes",
-    }
+    assert len(results) == len(tuples)
+    assert all(q.metadata.goal_mode == "sample" for q in results)
+
+    counts: dict[str, int] = {"components": 0, "trajectories": 0, "outcomes": 0}
+    for q in results:
+        assert q.metadata.goal_focus_area in counts
+        counts[q.metadata.goal_focus_area] += 1
+
+    # The sampling is weighted; components should dominate with a much larger weight.
+    assert counts["components"] > counts["trajectories"]
+    assert counts["components"] > counts["outcomes"]
+
+
+async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> None:
+    evaluator = Evaluator(Query, context="Test context")
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
+            async for t in tuples:
+                _, meta = context_builder(t)
+                yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
+
+    goals = GoalSpec(
+        components=GoalLayer(items=[GoalItem(name="c", weight=10.0)]),
+        trajectories=GoalLayer(summary="Prefer careful tool choice.", items=[GoalItem(name="t", weight=0.0)]),
+        outcomes=GoalLayer(items=[GoalItem(name="o", weight=0.0)]),
+    )
+
+    tuples = [
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+        for _ in range(200)
+    ]
+
+    with patch.object(
+        evaluator, "_build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        results = [
+            q
+            async for q in evaluator.queries(
+                tuples=tuples,
+                goals=goals,
+                config=QueryConfig(goal_mode="sample", goal_seed=123),
+            )
+        ]
+
+    counts: dict[str, int] = {}
+    for q in results:
+        counts[q.metadata.goal_focus_area] = counts.get(q.metadata.goal_focus_area, 0) + 1
+
+    # Summary-only trajectories should be eligible (default weight 1.0), even though
+    # it has no positive-weight items.
+    assert counts.get("trajectories", 0) > 0
+    # Outcomes has neither summary nor positive-weight items, so it should never appear.
+    assert counts.get("outcomes", 0) == 0
+    # Components has weight 10.0 vs trajectories weight 1.0, so components should dominate.
+    assert counts.get("components", 0) > counts.get("trajectories", 0)
 
 
 async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None:

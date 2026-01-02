@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import random
 from collections.abc import AsyncIterator, Sequence
 from typing import Type, TypeVar
@@ -11,7 +12,7 @@ from evaluateur.client import LLMClient
 from evaluateur.configs import QueryConfig, TupleConfig
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
 from evaluateur.generators.query.context import compose_query_context
-from evaluateur.goals import GoalFocusArea, GoalMode, GoalSpec
+from evaluateur.goals import GoalFocusArea, GoalSpec
 from evaluateur.generators.queries import (
     InstructorQueryGenerator,
     QueryGenerator,
@@ -131,9 +132,7 @@ class Evaluator:
 
         log.info("Generated %d tuples", generated_count)
 
-    async def _normalize_goals(
-        self, goals: GoalSpec | str | None
-    ) -> GoalSpec | None:
+    async def _normalize_goals(self, goals: GoalSpec | str | None) -> GoalSpec | None:
         if goals is None:
             return None
         if isinstance(goals, str):
@@ -201,10 +200,73 @@ class Evaluator:
         if config.goal_mode == "sample" and goal_spec is not None and focus_areas:
             rng = random.Random(config.goal_seed)
 
+            def _layer_weight(layer: object) -> float:
+                """Compute the effective sampling weight for a goal layer.
+
+                Rules:
+                - Sum all GoalItem.weight values where weight > 0.
+                - If there are no positive-weight items but the layer has a non-empty
+                  summary, default to weight 1.0 (so summaries can still be sampled).
+                - Otherwise treat the layer as weight 0 (ineligible).
+                """
+
+                # GoalLayer has .items (list[GoalItem]) and .summary (str | None).
+                items = getattr(layer, "items", None)
+                if items:
+                    total = math.fsum(
+                        float(it.weight) for it in items if float(it.weight) > 0.0
+                    )
+                    if total > 0.0:
+                        return total
+
+                summary = getattr(layer, "summary", None)
+                if isinstance(summary, str) and summary.strip():
+                    return 1.0
+                return 0.0
+
+            def _focus_weight(focus: GoalFocusArea) -> float:
+                if focus == "components":
+                    return _layer_weight(goal_spec.components)
+                if focus == "trajectories":
+                    return _layer_weight(goal_spec.trajectories)
+                return _layer_weight(goal_spec.outcomes)
+
+            weighted_focus_areas: list[tuple[GoalFocusArea, float]] = []
+            for focus in focus_areas:
+                w = _focus_weight(focus)
+                if w > 0.0:
+                    weighted_focus_areas.append((focus, w))
+
+            def _choose_focus_area() -> GoalFocusArea:
+                """Choose a focus area using numerically-stable weighted sampling."""
+
+                # Defensive fallback: if all weights are effectively 0, fall back to
+                # uniform sampling across eligible focus areas.
+                if not weighted_focus_areas:
+                    return rng.choice(focus_areas)
+
+                max_w = max(w for _, w in weighted_focus_areas)
+                if not (max_w > 0.0) or not math.isfinite(max_w):
+                    return rng.choice(focus_areas)
+
+                scaled = [w / max_w for _, w in weighted_focus_areas]
+                total = math.fsum(scaled)
+                if not (total > 0.0) or not math.isfinite(total):
+                    return rng.choice(focus_areas)
+
+                r = rng.random() * total
+                acc = 0.0
+                for (focus, _), s in zip(weighted_focus_areas, scaled, strict=True):
+                    acc += s
+                    if r < acc:
+                        return focus
+                # Floating-point edge case: return the last focus area.
+                return weighted_focus_areas[-1][0]
+
             def _context_builder(
                 t: GeneratedTuple,
             ) -> tuple[str, dict[str, object]]:
-                focus = rng.choice(focus_areas)
+                focus = _choose_focus_area()
                 focus_prompt = goal_spec.render_focused_prompt(
                     focus_area=focus,
                     max_chars=config.max_chars_for_goals,
@@ -235,7 +297,9 @@ class Evaluator:
 
         effective_context = compose_query_context(base_context, goal_prompt=goal_prompt)
 
-        async for q in query_gen.generate(self._aiter_tuples(tuples), effective_context):
+        async for q in query_gen.generate(
+            self._aiter_tuples(tuples), effective_context
+        ):
             merged = {
                 # Run metadata provides defaults; per-query metadata should win
                 # (e.g. generator may attach tracing keys).
@@ -259,7 +323,9 @@ class Evaluator:
     ) -> AsyncIterator[GeneratedQuery]:
         """Convenience wrapper: options → tuples → queries (streaming)."""
 
-        options_instance = await self._ensure_options(options, instructions=instructions)
+        options_instance = await self._ensure_options(
+            options, instructions=instructions
+        )
         tuple_iter = self.tuples(options_instance, config=tuple_config)
         async for q in self.queries(
             tuples=tuple_iter,
