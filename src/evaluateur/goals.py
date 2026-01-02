@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import textwrap
+import math
 from typing import Any, Iterable, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from evaluateur.client import LLMClient
 
@@ -45,6 +46,23 @@ class GoalItem(BaseModel):
         description="Optional examples of queries that satisfy this goal.",
     )
 
+    @field_validator("weight")
+    @classmethod
+    def _validate_weight(cls, v: float) -> float:
+        """Ensure weight is a finite, non-negative float.
+
+        Note: 0.0 is allowed and used as a "disabled goal" sentinel.
+        """
+
+        # Pydantic will typically coerce int/str inputs to float before validators.
+        # Keep this explicit to ensure consistent output type.
+        v = float(v)
+        if not math.isfinite(v):
+            raise ValueError("weight must be a finite number")
+        if v < 0:
+            raise ValueError("weight must be >= 0")
+        return v
+
 
 class GoalLayer(BaseModel):
     """A set of goals for one framework layer (components/trajectories/outcomes)."""
@@ -78,9 +96,9 @@ class GoalSpec(BaseModel):
             "You convert free-form user guidance into a structured GoalSpec used to generate "
             "synthetic evaluation queries.\n\n"
             "Framework (three layers to target):\n"
-            "- Components: individual building blocks (retrieval, tool calls, extraction, "
+            "- Components: individual building blocks (e.g. retrieval, tool calls, extraction, "
             "grounding/citations). These are unit-test style checks.\n"
-            "- Trajectories: the sequence of decisions and recovery behavior (tool choice, order, "
+            "- Trajectories: the sequence of decisions and recovery behavior (e.g. tool choice, order, "
             "retries, detecting staleness/missing info, handling conflicts, escalation).\n"
             "- Outcomes: what ships to users (task completion, checklist compliance, UX constraints, "
             "reliability under change).\n\n"

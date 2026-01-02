@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import math
+
+import pytest
+
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 
 
@@ -57,3 +61,18 @@ def test_goal_spec_render_prompt_truncation_respects_max_chars() -> None:
 
     assert len(prompt) <= max_chars
     assert prompt.endswith("…\n")
+
+
+def test_goal_item_weight_must_be_finite_and_non_negative() -> None:
+    with pytest.raises(ValueError):
+        GoalItem(name="bad", weight=-0.1)
+    with pytest.raises(ValueError):
+        GoalItem(name="bad", weight=math.inf)
+    with pytest.raises(ValueError):
+        GoalItem(name="bad", weight=-math.inf)
+    with pytest.raises(ValueError):
+        GoalItem(name="bad", weight=math.nan)
+
+    # 0.0 is allowed and used to disable goals without deleting them.
+    it = GoalItem(name="disabled", weight=0.0)
+    assert it.weight == 0.0
