@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GeneratedTuple, TupleConfig, TupleStrategy
+from evaluateur import Evaluator, GeneratedTuple, QueryConfig, TupleConfig, TupleStrategy
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 from evaluateur.generators.tuples import CrossProductTupleGenerator
 from evaluateur.models import GeneratedQuery
@@ -200,6 +200,64 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
         # Run metadata is injected per item
         assert q.metadata.mode == "instructor"  # default QueryConfig.mode
         assert q.metadata.goal_guided is True
+        assert q.metadata.goal_mode == "sample"
         assert isinstance(q.metadata.query_goals, GoalSpec)
-        assert q.metadata.query_goals.title == "test goals"
         assert q.metadata.query_goals.components.items[0].name == "force payer"
+        assert q.metadata.goal_focus_area == "components"
+
+
+async def test_evaluator_queries_includes_instructions_in_context() -> None:
+    evaluator = Evaluator(Query, context="Test context")
+
+    captured: list[str] = []
+
+    class DummyQueryGenerator:
+        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
+            captured.append(context)
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+        _ = [q async for q in evaluator.queries(tuples=[t1], instructions="Keep it short.")]
+
+    assert len(captured) == 1
+    assert "Test context" in captured[0]
+    assert "<instructions>" in captured[0]
+    assert "Keep it short." in captured[0]
+
+
+async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> None:
+    evaluator = Evaluator(Query, context="Test context")
+
+    class DummyQueryGenerator:
+        async def generate_with_context_builder(self, tuples, context_builder):  # type: ignore[no-untyped-def]
+            async for t in tuples:
+                _, meta = context_builder(t)
+                yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
+
+    goals = GoalSpec(
+        title="test goals",
+        components=GoalLayer(items=[GoalItem(name="c")]),
+        trajectories=GoalLayer(items=[GoalItem(name="t")]),
+        outcomes=GoalLayer(items=[GoalItem(name="o")]),
+    )
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
+
+    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+        results = [
+            q
+            async for q in evaluator.queries(
+                tuples=[t1, t2],
+                goals=goals,
+                config=QueryConfig(goal_mode="sample", goal_seed=123),
+            )
+        ]
+
+    assert len(results) == 2
+    assert results[0].metadata.goal_mode == "sample"
+    assert results[0].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}
+    assert results[1].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}

@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 
-def compose_context(context: str, goal_prompt: str | None) -> str:
-    """Compose evaluator context with optional goal guidance.
+def compose_query_context(
+    context: str,
+    *,
+    instructions: str | None = None,
+    goal_prompt: str | None = None,
+) -> str:
+    """Compose evaluator context with optional query instructions and goals.
 
-    This is the single source of truth for how goal prompts are appended to the
-    domain context across query generators.
+    This is the single source of truth for how query-generation instructions and
+    goal prompts are appended to the domain context across query generators.
     """
 
     base = (context or "").strip()
-    if not goal_prompt:
-        return base
+    chunks: list[str] = []
+    if base:
+        chunks.append(base)
 
-    gp = goal_prompt.strip()
-    if not base:
-        return gp
+    cleaned_instructions = (instructions or "").strip()
+    if cleaned_instructions:
+        chunks.append(f"<instructions>\n{cleaned_instructions}\n</instructions>")
 
-    return f"{base}\n\n{gp}"
+    gp = (goal_prompt or "").strip()
+    if gp:
+        chunks.append(gp)
 
+    return "\n\n".join(chunks).strip()

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import textwrap
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, Field
 
 from evaluateur.client import LLMClient
+
+
+GoalFocusArea = Literal["components", "trajectories", "outcomes"]
+GoalMode = Literal["full", "sample"]
 
 
 class GoalItem(BaseModel):
@@ -55,8 +59,6 @@ class GoalLayer(BaseModel):
 class GoalSpec(BaseModel):
     """User-provided guidance for shaping evaluation queries."""
 
-    title: str | None = Field(default=None, description="Optional name for this spec")
-
     components: GoalLayer = Field(default_factory=GoalLayer)
     trajectories: GoalLayer = Field(default_factory=GoalLayer)
     outcomes: GoalLayer = Field(default_factory=GoalLayer)
@@ -89,25 +91,25 @@ class GoalSpec(BaseModel):
             "- Prefer rich, explicit GoalItem.description over must_include/avoid.\n"
             "- Populate GoalItem.examples with concrete example user queries.\n\n"
             "Mapping rules (be concrete):\n"
-            "- Each layer should contain a small number of GoalItems (typically 1–5).\n"
+            "- Each layer should contain a small number of GoalItems (typically 1-5).\n"
             "- For each GoalItem:\n"
             "  - name: short label.\n"
-            "  - description: 2–5 sentences describing what the generated user query should stress, "
+            "  - description: 2-5 sentences describing what the generated user query should stress, "
             "what failure mode it targets, and what a good response behavior would look like.\n"
-            "  - examples: 1–3 fully-formed, natural-language example user queries that would "
+            "  - examples: 1-3 fully-formed, natural-language example user queries that would "
             "satisfy this goal.\n"
             "  - must_include/avoid: use only when the user explicitly asks for specific phrases or "
             "when a literal checklist token is essential; otherwise leave them empty.\n"
             "- Put assumptions / ambiguity handling in the layer summary.\n\n"
             "What good goals look like (test-oriented):\n"
             "- Freshness/staleness: force checking effective dates / most recent versions.\n"
-            "- Coverage gaps: force detecting missing required sources and saying \"not found\".\n"
+            '- Coverage gaps: force detecting missing required sources and saying "not found".\n'
             "- Tool semantics: force preferring authoritative sources/tools over generic web search.\n"
             "- Conflicts: force detecting conflicting evidence and reconciling or escalating.\n"
             "- Escalation/uncertainty: force asking for confirmation or flagging uncertainty.\n"
             "- Outcome constraints: force checklist-ready, workflow-usable outputs.\n\n"
             "Output constraints (GPT-5.2 best practices):\n"
-            "- Be specific and test-oriented; avoid vague statements like \"be high quality\".\n"
+            '- Be specific and test-oriented; avoid vague statements like "be high quality".\n'
             "- If guidance is broad, infer reasonable goals across ALL THREE layers.\n"
             "- Use weight (default 1.0) to reflect priority; set 0.0 to disable goals.\n"
             "- Do not invent domain facts; do not introduce new requirements unrelated to the input.\n"
@@ -117,7 +119,7 @@ class GoalSpec(BaseModel):
             "Turn the following guidance into a GoalSpec.\n\n"
             "Important:\n"
             "- Prefer verbose GoalItem.description.\n"
-            "- Include 1–3 GoalItem.examples per goal (example user queries).\n"
+            "- Include 1-3 GoalItem.examples per goal (example user queries).\n"
             "- Use must_include/avoid only if explicitly requested or clearly necessary.\n"
             "- If the guidance is broad, infer actionable goals in components, trajectories, and "
             "outcomes.\n\n"
@@ -144,8 +146,7 @@ class GoalSpec(BaseModel):
             and not self.trajectories.items
             and not self.outcomes.items
             and not (
-                self.title
-                or self.components.summary
+                self.components.summary
                 or self.trajectories.summary
                 or self.outcomes.summary
             )
@@ -182,8 +183,6 @@ class GoalSpec(BaseModel):
 
         chunks: list[str] = []
         header = "Query optimization goals"
-        if self.title:
-            header += f" — {self.title}"
         chunks.append(header + ":")
 
         if self.components.summary or self.components.items:
@@ -209,6 +208,88 @@ class GoalSpec(BaseModel):
             return rendered
 
         # If too long, drop examples implicitly (we never render them) and truncate.
+        suffix = "…\n"
+        if max_chars <= 0:
+            return ""
+        if max_chars <= len(suffix):
+            return suffix[:max_chars]
+        cut = max_chars - len(suffix)
+        return rendered[:cut].rstrip() + suffix
+
+    def available_focus_areas(self) -> list[GoalFocusArea]:
+        """Return the goal layers that are non-empty (considering weights)."""
+
+        def _has_any(layer: GoalLayer) -> bool:
+            if layer.summary and layer.summary.strip():
+                return True
+            return any(it.weight > 0 for it in layer.items)
+
+        areas: list[GoalFocusArea] = []
+        if _has_any(self.components):
+            areas.append("components")
+        if _has_any(self.trajectories):
+            areas.append("trajectories")
+        if _has_any(self.outcomes):
+            areas.append("outcomes")
+        return areas
+
+    def render_focus_prompt(
+        self, *, focus_area: GoalFocusArea, max_chars: int = 5000
+    ) -> str:
+        """Render only a single goal layer (components/trajectories/outcomes).
+
+        Intended for sampling mode, where each generated query is conditioned on a
+        single focus area to increase diversity.
+        """
+
+        layer: GoalLayer
+        label: str
+        if focus_area == "components":
+            layer = self.components
+            label = "Components"
+        elif focus_area == "trajectories":
+            layer = self.trajectories
+            label = "Trajectories"
+        else:
+            layer = self.outcomes
+            label = "Outcomes"
+
+        # Reuse the same formatting conventions as render_prompt(), but restrict
+        # to a single section.
+        def _render_items(items: Iterable[GoalItem]) -> list[str]:
+            lines: list[str] = []
+            for it in items:
+                if it.weight <= 0:
+                    continue
+                parts: list[str] = [it.name]
+                if it.description:
+                    parts.append(it.description)
+
+                line = " - ".join(parts)
+                extra: list[str] = []
+                if it.must_include:
+                    extra.append(
+                        "must include: "
+                        + ", ".join(f"`{it}`" for it in it.must_include)
+                    )
+                if it.avoid:
+                    extra.append("avoid: " + ", ".join(f"`{it}`" for it in it.avoid))
+                if extra:
+                    line += " (" + "; ".join(extra) + ")"
+                lines.append(f"- {line}")
+            return lines
+
+        chunks: list[str] = []
+        chunks.append(f"Query optimization goals (focus area: {label}):")
+        chunks.append(f"\n{label}:")
+        if layer.summary:
+            chunks.append(textwrap.fill(layer.summary, width=96))
+        chunks.extend(_render_items(layer.items))
+
+        rendered = "\n".join(chunks).strip() + "\n"
+        if len(rendered) <= max_chars:
+            return rendered
+
         suffix = "…\n"
         if max_chars <= 0:
             return ""

@@ -46,6 +46,11 @@ async def main() -> None:
         options=options,
         tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
         query_config=QueryConfig(mode=QueryMode.INSTRUCTOR),
+        instructions="""
+Write realistic user questions.
+Keep them short but specific.
+Don't include any extra explanation outside the query itself.
+""",
     ):
         print(q.source_tuple.values, "->", q.query)
 
@@ -79,6 +84,48 @@ You can guide query generation using the three-layer framework by providing a
 `GoalSpec` (structured) or free-form text (which is normalized into a `GoalSpec`).
 
 Goals are used to **condition queries per run**, so you can iterate quickly.
+
+### Sampling goals per query (diversity mode)
+
+By default, Evaluateur picks a single focus area
+(**components**, **trajectories**, or **outcomes**) *per generated query*.
+This helps ensure one run produces a mix of different stress-test styles.
+
+```python
+import asyncio
+from pydantic import BaseModel, Field
+
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryConfig, QueryMode
+
+
+class Query(BaseModel):
+    payer: str = Field(...)
+    age: str = Field(...)
+    complexity: str = Field(...)
+    geography: str = Field(...)
+
+
+async def main() -> None:
+    evaluator = Evaluator(Query, context="Healthcare prior authorization")
+
+    goals = GoalSpec(
+        title="PA failures",
+        components=GoalLayer(items=[GoalItem(name="freshness checks")]),
+        trajectories=GoalLayer(items=[GoalItem(name="conflict handling")]),
+        outcomes=GoalLayer(items=[GoalItem(name="checklist-ready")]),
+    )
+
+    async for q in evaluator.run(
+        query_config=QueryConfig(mode=QueryMode.INSTRUCTOR, goal_seed=0),
+        instructions="Make the question sound like a real user.",
+        goals=goals,
+    ):
+        print(q.metadata.goal_focus_area, "->", q.query)
+        break
+
+
+asyncio.run(main())
+```
 
 Structured goals:
 

@@ -4,7 +4,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from evaluateur.goals import GoalSpec
+from evaluateur.goals import GoalFocusArea, GoalMode, GoalSpec
 from evaluateur.types import ScalarValue
 
 
@@ -40,6 +40,8 @@ class QueryMetadata(BaseModel):
     mode: Literal["instructor"] | None = None
     goal_guided: bool = False
     query_goals: GoalSpec | None = None
+    goal_mode: GoalMode | None = None
+    goal_focus_area: GoalFocusArea | None = None
 
 
 class GeneratedQuery(BaseModel):

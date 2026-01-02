@@ -25,6 +25,13 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
     assert "must include" in prompt
     assert len(prompt) <= 2000
 
+    focus_prompt = spec.render_focus_prompt(focus_area="components", max_chars=2000)
+    assert "focus area" in focus_prompt
+    assert "Components:" in focus_prompt
+    assert "freshness" in focus_prompt
+    assert "Trajectories:" not in focus_prompt
+    assert "Outcomes:" not in focus_prompt
+
 
 def test_goal_spec_is_empty_when_no_goals() -> None:
     assert GoalSpec().is_empty() is True
