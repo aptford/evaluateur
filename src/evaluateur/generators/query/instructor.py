@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from inspect import isawaitable
 
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
 from evaluateur.generators.query.prompts import build_instructor_messages_for_tuple
+from evaluateur.generators.query.protocols import ContextBuilder
 from evaluateur.models import GeneratedQuery, GeneratedTuple
+from evaluateur.models import QueryMetadata
 
 log = logging.getLogger(__name__)
+
+
+class _QueryModel(BaseModel):
+    query: str
 
 
 class InstructorQueryGenerator:
@@ -19,57 +26,58 @@ class InstructorQueryGenerator:
         self._client = client
 
     async def generate(
-        self, tuples: AsyncIterator[GeneratedTuple], context: str
-    ) -> AsyncIterator[GeneratedQuery]:
-        client = self._client.instructor_client
-
-        class QueryModel(BaseModel):
-            query: str
-
-        i = 0
-        async for t in tuples:
-            i += 1
-            messages = build_instructor_messages_for_tuple(tuple=t, context=context)
-            log.debug("InstructorQueryGenerator prompt (tuple=%d):\n%s", i, messages[-1]["content"])
-
-            result: QueryModel = await client.chat.completions.create(
-                model=self._client.model_name,
-                response_model=QueryModel,
-                messages=messages,
-            )
-            yield GeneratedQuery(query=result.query, source_tuple=t)
-
-    async def generate_with_context_builder(
         self,
         tuples: AsyncIterator[GeneratedTuple],
-        context_builder,
+        context: str,
+        *,
+        context_builder: ContextBuilder | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
-        """Generate queries, computing context per tuple.
+        """Generate queries from tuples.
 
-        This is used by sampling modes where each query should receive a
-        different goal focus area (e.g., components vs trajectories vs outcomes).
+        Parameters
+        ----------
+        tuples
+            Async stream of tuples to turn into natural language queries.
+        context
+            Default domain/context to use when no per-tuple context is provided.
+        context_builder
+            Optional callable that can vary context per tuple and attach per-query
+            metadata. The callable may be sync or async and must return
+            ``(context: str, metadata: Mapping[str, object])``.
         """
 
         client = self._client.instructor_client
 
-        class QueryModel(BaseModel):
-            query: str
+        async def _resolve_context_and_metadata(
+            t: GeneratedTuple,
+        ) -> tuple[str, QueryMetadata]:
+            if context_builder is None:
+                return context, QueryMetadata()
+
+            maybe = context_builder(t)
+            built = await maybe if isawaitable(maybe) else maybe
+            ctx, meta = built
+            if isinstance(meta, QueryMetadata):
+                return ctx, meta
+            return ctx, QueryMetadata.model_validate(meta)
 
         i = 0
         async for t in tuples:
             i += 1
-            context, meta = context_builder(t)
-            messages = build_instructor_messages_for_tuple(tuple=t, context=context)
-            log.debug(
-                "InstructorQueryGenerator prompt (tuple=%d):\n%s",
-                i,
-                messages[-1]["content"],
+            effective_context, metadata = await _resolve_context_and_metadata(t)
+            messages = build_instructor_messages_for_tuple(
+                tuple=t, context=effective_context
             )
+            log.debug("InstructorQueryGenerator prompt (tuple=%d):\n%s", i, messages[-1]["content"])
 
-            result: QueryModel = await client.chat.completions.create(
+            result: _QueryModel = await client.chat.completions.create(
                 model=self._client.model_name,
-                response_model=QueryModel,
+                response_model=_QueryModel,
                 messages=messages,
             )
-            yield GeneratedQuery(query=result.query, source_tuple=t, metadata=meta)
+            yield GeneratedQuery(
+                query=result.query,
+                source_tuple=t,
+                metadata=metadata,
+            )
 

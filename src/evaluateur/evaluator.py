@@ -179,11 +179,6 @@ class Evaluator:
         )
         goal_guided = bool(focus_areas)
 
-        goal_prompt: str | None = None
-        if config.goal_mode == "full" and goal_spec is not None:
-            # Full mode conditions the entire run on all goals at once.
-            goal_prompt = goal_spec.render_prompt(max_chars=config.max_chars_for_goals)
-
         run_metadata = QueryMetadata(
             mode=config.mode.value,
             goal_guided=goal_guided,
@@ -193,6 +188,13 @@ class Evaluator:
                 if goal_spec is not None and not goal_spec.is_empty()
                 else None
             ),
+        )
+
+        # Base context is shared across the run; goal sampling can append a
+        # per-tuple focused goal prompt via the context_builder.
+        base_context = compose_query_context(
+            self.context,
+            instructions=instructions,
         )
 
         q: GeneratedQuery
@@ -207,45 +209,31 @@ class Evaluator:
                     focus_area=focus,
                     max_chars=config.max_chars_for_goals,
                 )
-                ctx = compose_query_context(
-                    self.context,
-                    instructions=instructions,
-                    goal_prompt=focus_prompt,
-                )
+                ctx = compose_query_context(base_context, goal_prompt=focus_prompt)
                 return ctx, {"goal_focus_area": focus}
 
-            gen_with_builder = getattr(query_gen, "generate_with_context_builder", None)
-            if gen_with_builder is not None:
-                async for q in gen_with_builder(  # type: ignore[no-untyped-call]
-                    self._aiter_tuples(tuples),
-                    _context_builder,
-                ):
-                    merged = {
-                        **run_metadata.model_dump(exclude_none=True),
-                        **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
-                    }
-                    yield GeneratedQuery(
-                        query=q.query,
-                        source_tuple=q.source_tuple,
-                        metadata=QueryMetadata.model_validate(merged),
-                    )
-                return
+            async for q in query_gen.generate(
+                self._aiter_tuples(tuples),
+                base_context,
+                context_builder=_context_builder,
+            ):
+                merged = {
+                    **run_metadata.model_dump(exclude_none=True),
+                    **q.metadata.model_dump(exclude_none=True, exclude_unset=True),
+                }
+                yield GeneratedQuery(
+                    query=q.query,
+                    source_tuple=q.source_tuple,
+                    metadata=QueryMetadata.model_validate(merged),
+                )
+            return
 
-            # Compatibility fallback: if the generator cannot vary context per
-            # tuple, sample a single focus area once (seeded) and apply it to
-            # the whole run.
-            run_focus = rng.choice(focus_areas)
-            run_metadata.goal_focus_area = run_focus
-            goal_prompt = goal_spec.render_focused_prompt(
-                focus_area=run_focus,
-                max_chars=config.max_chars_for_goals,
-            )
+        goal_prompt: str | None = None
+        if config.goal_mode == "full" and goal_spec is not None:
+            # Full mode conditions the entire run on all goals at once.
+            goal_prompt = goal_spec.render_prompt(max_chars=config.max_chars_for_goals)
 
-        effective_context = compose_query_context(
-            self.context,
-            instructions=instructions,
-            goal_prompt=goal_prompt,
-        )
+        effective_context = compose_query_context(base_context, goal_prompt=goal_prompt)
 
         async for q in query_gen.generate(self._aiter_tuples(tuples), effective_context):
             merged = {

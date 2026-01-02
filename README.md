@@ -129,6 +129,50 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## Context builders (advanced)
+
+A **context builder** is a callable used by query generators to vary the prompt
+**per tuple**, instead of using one shared `context` string for the whole run.
+
+It returns two things:
+
+- A `context` string to include in the prompt for that tuple
+- Optional per-query `metadata` (extra keys are allowed) that will be merged into `q.metadata`
+
+Evaluateur uses a context builder internally when you enable goal sampling
+(`QueryConfig(goal_mode="sample")`) so that each generated query can focus on a
+different goal area (components vs trajectories vs outcomes).
+
+If you write a custom query generator, accept `context_builder` and fall back to
+the base `context` when it is not provided.
+
+```python
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+from evaluateur.generators.query.protocols import ContextBuilder
+from evaluateur.models import GeneratedQuery, GeneratedTuple
+
+
+class MyQueryGenerator:
+    async def generate(
+        self,
+        tuples: AsyncIterator[GeneratedTuple],
+        context: str,
+        *,
+        context_builder: ContextBuilder | None = None,
+    ) -> AsyncIterator[GeneratedQuery]:
+        async for t in tuples:
+            if context_builder is None:
+                effective_context, meta = context, {}
+            else:
+                effective_context, meta = context_builder(t)
+
+            # Use effective_context to build your prompt, and attach meta if you want.
+            yield GeneratedQuery(query=f"ctx={effective_context}", source_tuple=t, metadata=meta)
+```
+
 Structured goals:
 
 ```python

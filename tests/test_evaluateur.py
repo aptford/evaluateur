@@ -169,12 +169,16 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
     evaluator = Evaluator(Query, context="Test context")
 
     class DummyQueryGenerator:
-        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
             async for t in tuples:
+                _, meta = context_builder(t)
                 yield GeneratedQuery(
                     query=f"Q:{t.values}",
                     source_tuple=t,
-                    metadata={"generator": "dummy"},
+                    metadata={"generator": "dummy", **meta},
                 )
 
     goals = GoalSpec(
@@ -217,7 +221,9 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
     captured: list[str] = []
 
     class DummyQueryGenerator:
-        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
             captured.append(context)
             async for t in tuples:
                 yield GeneratedQuery(query="x", source_tuple=t)
@@ -242,7 +248,10 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
     evaluator = Evaluator(Query, context="Test context")
 
     class DummyQueryGenerator:
-        async def generate_with_context_builder(self, tuples, context_builder):  # type: ignore[no-untyped-def]
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
             async for t in tuples:
                 _, meta = context_builder(t)
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
@@ -288,9 +297,13 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
     captured: list[str] = []
 
     class DummyQueryGenerator:
-        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
-            captured.append(context)
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
             async for t in tuples:
+                ctx, _ = context_builder(t)
+                captured.append(ctx)
                 yield GeneratedQuery(query="x", source_tuple=t)
 
     # Ensure the goal prompt is long enough to require truncation.
