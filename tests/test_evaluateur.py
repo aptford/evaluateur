@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GeneratedTuple, QueryConfig, TupleConfig, TupleStrategy
+from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
+from evaluateur.configs import QueryConfig, TupleConfig
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 from evaluateur.generators.tuples import CrossProductTupleGenerator
 from evaluateur.models import GeneratedQuery
@@ -261,3 +262,41 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
     assert results[0].metadata.goal_mode == "sample"
     assert results[0].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}
     assert results[1].metadata.goal_focus_area in {"components", "trajectories", "outcomes"}
+
+
+async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None:
+    evaluator = Evaluator(Query, context="Test context")
+
+    captured: list[str] = []
+
+    class DummyQueryGenerator:
+        async def generate(self, tuples, context):  # type: ignore[no-untyped-def]
+            captured.append(context)
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    # Ensure the goal prompt is long enough to require truncation.
+    long_summary = "x" * 10_000
+    goals = GoalSpec(
+        title="test goals",
+        components=GoalLayer(summary=long_summary, items=[GoalItem(name="c")]),
+    )
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    with patch.object(evaluator, "_build_query_generator", return_value=DummyQueryGenerator()):
+        _ = [
+            q
+            async for q in evaluator.queries(
+                tuples=[t1],
+                goals=goals,
+                config=QueryConfig(max_chars_for_goals=64),
+            )
+        ]
+
+    assert len(captured) == 1
+    # The goal prompt truncation uses an ellipsis suffix (newline is stripped by
+    # compose_query_context()).
+    assert "…" in captured[0]
+    # We shouldn't see the full unbounded summary reflected in the context.
+    assert long_summary not in captured[0]

@@ -3,12 +3,12 @@ from __future__ import annotations
 import logging
 import random
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
 from typing import Type, TypeVar
 
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
+from evaluateur.configs import QueryConfig, TupleConfig
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
 from evaluateur.generators.query.context import compose_query_context
 from evaluateur.goals import GoalFocusArea, GoalMode, GoalSpec
@@ -26,24 +26,6 @@ from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
 log = logging.getLogger(__name__)
 
 QueryModelT = TypeVar("QueryModelT", bound=BaseModel)
-
-
-@dataclass(frozen=True)
-class TupleConfig:
-    """Configuration for tuple generation."""
-
-    strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT
-    count: int = 20
-    seed: int = 0
-
-
-@dataclass(frozen=True)
-class QueryConfig:
-    """Configuration for query generation."""
-
-    mode: QueryMode = QueryMode.INSTRUCTOR
-    goal_mode: GoalMode = "sample"
-    goal_seed: int = 0
 
 
 class Evaluator:
@@ -200,7 +182,7 @@ class Evaluator:
         goal_prompt: str | None = None
         if config.goal_mode == "full" and goal_spec is not None:
             # Full mode conditions the entire run on all goals at once.
-            goal_prompt = goal_spec.render_prompt()
+            goal_prompt = goal_spec.render_prompt(max_chars=config.max_chars_for_goals)
 
         run_metadata = QueryMetadata(
             mode=config.mode.value,
@@ -221,7 +203,10 @@ class Evaluator:
                 t: GeneratedTuple,
             ) -> tuple[str, dict[str, object]]:
                 focus = rng.choice(focus_areas)
-                focus_prompt = goal_spec.render_focus_prompt(focus_area=focus)
+                focus_prompt = goal_spec.render_focused_prompt(
+                    focus_area=focus,
+                    max_chars=config.max_chars_for_goals,
+                )
                 ctx = compose_query_context(
                     self.context,
                     instructions=instructions,
@@ -251,7 +236,10 @@ class Evaluator:
             # the whole run.
             run_focus = rng.choice(focus_areas)
             run_metadata.goal_focus_area = run_focus
-            goal_prompt = goal_spec.render_focus_prompt(focus_area=run_focus)
+            goal_prompt = goal_spec.render_focused_prompt(
+                focus_area=run_focus,
+                max_chars=config.max_chars_for_goals,
+            )
 
         effective_context = compose_query_context(
             self.context,

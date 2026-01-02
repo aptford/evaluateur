@@ -20,7 +20,8 @@ space, then use the `Evaluator` to generate options and queries:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryConfig, QueryMode, TupleConfig, TupleStrategy
+from evaluateur import Evaluator, QueryMode, TupleStrategy
+from evaluateur.configs import QueryConfig, TupleConfig
 
 
 class Query(BaseModel):
@@ -84,6 +85,7 @@ You can guide query generation using the three-layer framework by providing a
 `GoalSpec` (structured) or free-form text (which is normalized into a `GoalSpec`).
 
 Goals are used to **condition queries per run**, so you can iterate quickly.
+If you provide `GoalItem.examples`, they are included in the internal goal prompt passed to the query generator.
 
 ### Sampling goals per query (diversity mode)
 
@@ -95,7 +97,8 @@ This helps ensure one run produces a mix of different stress-test styles.
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryConfig, QueryMode
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
+from evaluateur.configs import QueryConfig
 
 
 class Query(BaseModel):
@@ -109,7 +112,6 @@ async def main() -> None:
     evaluator = Evaluator(Query, context="Healthcare prior authorization")
 
     goals = GoalSpec(
-        title="PA failures",
         components=GoalLayer(items=[GoalItem(name="freshness checks")]),
         trajectories=GoalLayer(items=[GoalItem(name="conflict handling")]),
         outcomes=GoalLayer(items=[GoalItem(name="checklist-ready")]),
@@ -133,7 +135,8 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryConfig, QueryMode
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
+from evaluateur.configs import QueryConfig
 
 
 class Query(BaseModel):
@@ -147,7 +150,6 @@ async def main() -> None:
     evaluator = Evaluator(Query, context="Healthcare prior authorization")
 
     goals = GoalSpec(
-        title="PA letter search failures",
         components=GoalLayer(
             summary="Stress freshness, missing-document detection, and citation traceability.",
             items=[
@@ -199,7 +201,8 @@ Free-form goals (normalized with Instructor):
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryConfig, QueryMode
+from evaluateur import Evaluator, QueryMode
+from evaluateur.configs import QueryConfig
 
 
 class Query(BaseModel):

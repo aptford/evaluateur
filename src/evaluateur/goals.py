@@ -152,7 +152,7 @@ class GoalSpec(BaseModel):
             )
         )
 
-    def render_prompt(self, *, max_chars: int = 5000) -> str:
+    def render_prompt(self, *, max_chars: int | None = None) -> str:
         """Render this spec into a compact instruction block.
 
         The output is designed to be appended to the evaluator's domain context.
@@ -179,6 +179,12 @@ class GoalSpec(BaseModel):
                 if extra:
                     line += " (" + "; ".join(extra) + ")"
                 lines.append(f"- {line}")
+
+                if it.examples:
+                    examples = [ex.strip() for ex in it.examples if ex.strip()]
+                    if examples:
+                        lines.append("  - examples:")
+                        lines.extend(f'    - "{ex}"' for ex in examples)
             return lines
 
         chunks: list[str] = []
@@ -204,10 +210,11 @@ class GoalSpec(BaseModel):
             chunks.extend(_render_items(self.outcomes.items))
 
         rendered = "\n".join(chunks).strip() + "\n"
+        if not isinstance(max_chars, int):
+            return rendered
         if len(rendered) <= max_chars:
             return rendered
 
-        # If too long, drop examples implicitly (we never render them) and truncate.
         suffix = "…\n"
         if max_chars <= 0:
             return ""
@@ -233,8 +240,8 @@ class GoalSpec(BaseModel):
             areas.append("outcomes")
         return areas
 
-    def render_focus_prompt(
-        self, *, focus_area: GoalFocusArea, max_chars: int = 5000
+    def render_focused_prompt(
+        self, *, focus_area: GoalFocusArea, max_chars: int | None = None
     ) -> str:
         """Render only a single goal layer (components/trajectories/outcomes).
 
@@ -277,6 +284,12 @@ class GoalSpec(BaseModel):
                 if extra:
                     line += " (" + "; ".join(extra) + ")"
                 lines.append(f"- {line}")
+
+                if it.examples:
+                    examples = [ex.strip() for ex in it.examples if ex.strip()]
+                    if examples:
+                        lines.append("  - examples:")
+                        lines.extend(f'    - "{ex}"' for ex in examples)
             return lines
 
         chunks: list[str] = []
@@ -287,6 +300,8 @@ class GoalSpec(BaseModel):
         chunks.extend(_render_items(layer.items))
 
         rendered = "\n".join(chunks).strip() + "\n"
+        if not isinstance(max_chars, int):
+            return rendered
         if len(rendered) <= max_chars:
             return rendered
 
