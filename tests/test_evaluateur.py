@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import List
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import BaseModel, Field
@@ -235,7 +235,10 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
     ):
         _ = [
             q
-            async for q in evaluator.queries(tuples=[t1], instructions="Keep it short.")
+            async for q in evaluator.queries(
+                tuples=[t1],
+                config=QueryConfig(instructions="Keep it short."),
+            )
         ]
 
     assert len(captured) == 1
@@ -263,8 +266,7 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
-        for _ in range(200)
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(200)
     ]
 
     with patch(
@@ -306,13 +308,15 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
 
     goals = GoalSpec(
         components=GoalLayer(items=[GoalItem(name="c", weight=10.0)]),
-        trajectories=GoalLayer(summary="Prefer careful tool choice.", items=[GoalItem(name="t", weight=0.0)]),
+        trajectories=GoalLayer(
+            summary="Prefer careful tool choice.",
+            items=[GoalItem(name="t", weight=0.0)],
+        ),
         outcomes=GoalLayer(items=[GoalItem(name="o", weight=0.0)]),
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
-        for _ in range(200)
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(200)
     ]
 
     with patch(
@@ -329,7 +333,9 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
 
     counts: dict[str, int] = {}
     for q in results:
-        counts[q.metadata.goal_focus_area] = counts.get(q.metadata.goal_focus_area, 0) + 1
+        counts[q.metadata.goal_focus_area] = (
+            counts.get(q.metadata.goal_focus_area, 0) + 1
+        )
 
     # Summary-only trajectories should be eligible (default weight 1.0), even though
     # it has no positive-weight items.
@@ -381,3 +387,56 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
     assert "…" in captured[0]
     # We shouldn't see the full unbounded summary reflected in the context.
     assert long_summary not in captured[0]
+
+
+async def test_query_instructions_do_not_apply_to_option_generation() -> None:
+    """Regression test: query-writing instructions must not affect option generation.
+
+    Query instructions live on QueryConfig and are meant for query-writing.
+    When `options` are not provided, the evaluator may generate options first;
+    those should be controlled only by TupleConfig.instructions.
+    """
+
+    evaluator = Evaluator(Query, context="Test context")
+
+    OptionsModel = create_options_model(Query)
+    fake_options = OptionsModel(
+        payer=["Cigna"],
+        age=["adult"],
+        complexity=["simple"],
+        geography=["CA"],
+    )
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    async def _fake_options(*, config):  # type: ignore[no-untyped-def]
+        captured["instructions"] = getattr(config, "instructions", None)
+        return fake_options
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            _ = context, context_builder
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    # Patch `Evaluator.options()` to observe what instruction string would be used
+    # for option generation. Then patch query generation so we don't call any LLM.
+    with patch.object(evaluator, "options", new=AsyncMock(side_effect=_fake_options)):
+        with patch(
+            "evaluateur.evaluator.build_query_generator",
+            return_value=DummyQueryGenerator(),
+        ):
+            _ = [
+                q
+                async for q in evaluator.run(
+                    options=None,
+                    tuple_config=TupleConfig(count=1),
+                    query_config=QueryConfig(
+                        instructions="Keep them short and specific."
+                    ),
+                )
+            ]
+
+    assert captured["instructions"] is None

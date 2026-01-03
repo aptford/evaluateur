@@ -53,11 +53,7 @@ class Evaluator:
             self.client.model_name,
         )
 
-    async def options(
-        self,
-        instructions: str | None = None,
-        n: int = 5,
-    ) -> BaseModel:
+    async def options(self, *, config: TupleConfig = TupleConfig()) -> BaseModel:
         """Generate an options ``BaseModel`` from the configured query model.
 
         Every simple field on the input model is turned into a sequence of
@@ -66,23 +62,26 @@ class Evaluator:
         log.info(
             "Generating options for %s (n=%d)",
             self.model.__name__,
-            n,
+            config.options_per_field,
         )
         result = await self._options_generator.generate_options(
             self.model,
-            instructions=instructions,
-            count_per_field=n,
+            instructions=config.instructions,
+            count_per_field=config.options_per_field,
         )
         log.debug("Generated options: %s", result)
         return result
 
     async def _ensure_options(
-        self, maybe_options: BaseModel | None, *, instructions: str | None = None
+        self,
+        maybe_options: BaseModel | None,
+        *,
+        config: TupleConfig,
     ) -> BaseModel:
         """Ensure options are available, generating them if not provided."""
         if maybe_options is not None:
             return maybe_options
-        return await self.options(instructions=instructions)
+        return await self.options(config=config)
 
     async def tuples(
         self,
@@ -100,7 +99,7 @@ class Evaluator:
             config.count,
         )
 
-        options_instance = await self._ensure_options(options)
+        options_instance = await self._ensure_options(options, config=config)
         log.debug("Using options: %s", options_instance)
 
         tuple_gen = build_tuple_generator(client=self.client, strategy=config.strategy)
@@ -120,7 +119,6 @@ class Evaluator:
         tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
         config: QueryConfig = QueryConfig(),
         goals: GoalSpec | str | None = None,
-        instructions: str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         log.info(
             "Generating queries: mode=%s, tuple_count=%s",
@@ -151,7 +149,7 @@ class Evaluator:
         # per-tuple focused goal prompt via the context_builder.
         base_context = compose_query_context(
             self.context,
-            instructions=instructions,
+            instructions=config.instructions,
         )
 
         q: GeneratedQuery
@@ -204,18 +202,23 @@ class Evaluator:
         tuple_config: TupleConfig = TupleConfig(),
         query_config: QueryConfig = QueryConfig(),
         goals: GoalSpec | str | None = None,
-        instructions: str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
-        """Convenience wrapper: options → tuples → queries (streaming)."""
+        """Convenience wrapper: options → tuples → queries (streaming).
 
-        options_instance = await self._ensure_options(
-            options, instructions=instructions
+        Notes
+        -----
+        Instructions are configured via the config objects:
+        - Use ``QueryConfig.instructions`` to guide query writing.
+        - Use ``TupleConfig.options_instructions`` to guide option generation.
+        """
+
+        tuple_iter = self.tuples(
+            options,
+            config=tuple_config,
         )
-        tuple_iter = self.tuples(options_instance, config=tuple_config)
         async for q in self.queries(
             tuples=tuple_iter,
             config=query_config,
             goals=goals,
-            instructions=instructions,
         ):
             yield q

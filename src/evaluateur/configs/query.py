@@ -11,6 +11,11 @@ class QueryConfig:
     """Configuration for query generation."""
 
     mode: QueryMode = QueryMode.INSTRUCTOR
+    #: Optional instructions that guide *query writing* (natural language).
+    #:
+    #: These instructions are appended to the evaluator context for query
+    #: generation (e.g. "Keep questions short and specific.").
+    instructions: str | None = None
     goal_mode: GoalMode = "sample"
     goal_seed: int = 0
     #: Optional cap for goal prompt length.

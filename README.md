@@ -39,19 +39,24 @@ async def main() -> None:
 
     # Step 1: generate options for each dimension using Instructor
     options = await evaluator.options(
-        instructions="Focus on common US payers and edge-case clinical scenarios.",
+        config=TupleConfig(
+            options_instructions="Focus on common US payers and edge-case clinical scenarios.",
+            options_per_field=5,
+        ),
     )
 
     # Step 2: stream tuples -> natural language queries
     async for q in evaluator.run(
         options=options,
         tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
-        query_config=QueryConfig(mode=QueryMode.INSTRUCTOR),
-        instructions="""
+        query_config=QueryConfig(
+            mode=QueryMode.INSTRUCTOR,
+            instructions="""
 Write realistic user questions.
 Keep them short but specific.
 Don't include any extra explanation outside the query itself.
 """,
+        ),
     ):
         print(q.source_tuple.values, "->", q.query)
 
@@ -68,6 +73,17 @@ If your input model already uses iterator fields (for example
 options and are not modified by `generate_options()`. Scalar fields of any
 basic type (`str`, `int`, `float`, and so on) are turned into lists of
 options automatically.
+
+### Instructions: options vs queries
+
+Evaluateur uses two different instruction strings:
+
+- **Option generation**: use `TupleConfig.options_instructions` (either via
+  `Evaluator.options(config=...)` or via `Evaluator.run(..., tuple_config=...)`)
+  to guide what *dimension values* to propose (e.g. “Focus on common US payers.”).
+- **Query generation**: use `QueryConfig.instructions` (either via
+  `Evaluator.run(..., query_config=...)` or `Evaluator.queries(..., config=...)`) to guide how the *natural language
+  query* should be written (e.g. “Keep the question short and specific.”).
 
 ## Tuple generation: seeded sampling for cross product
 
@@ -123,8 +139,11 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        query_config=QueryConfig(mode=QueryMode.INSTRUCTOR, goal_seed=0),
-        instructions="Make the question sound like a real user.",
+        query_config=QueryConfig(
+            mode=QueryMode.INSTRUCTOR,
+            goal_seed=0,
+            instructions="Make the question sound like a real user.",
+        ),
         goals=goals,
     ):
         print(q.metadata.goal_focus_area, "->", q.query)
