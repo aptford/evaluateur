@@ -68,7 +68,8 @@ class OptionsGenerator:
             "common and edge-case values."
         )
         if instructions:
-            system_instructions += f" Additional guidance: {instructions}"
+            system_instructions += " Additional instructions:\n"
+            system_instructions += f"<instructions>\n{instructions}\n</instructions>\n"
 
         # Build a text description of the dimensions for the user message.
         dimension_descriptions: list[str] = []
