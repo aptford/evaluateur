@@ -28,7 +28,7 @@ def build_tuple_generator(
     raise ValueError(f"Unsupported tuple strategy: {strategy}")
 
 
-def build_query_generator(*, client: LLMClient, mode: QueryMode) -> QueryGenerator:
+def build_query_generator(*, client: LLMClient, mode: QueryMode=QueryMode.INSTRUCTOR) -> QueryGenerator:
     """Create a query generator instance for the given mode."""
 
     if mode == QueryMode.INSTRUCTOR:

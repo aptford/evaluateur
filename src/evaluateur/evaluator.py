@@ -122,19 +122,17 @@ class Evaluator:
         self,
         *,
         tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
-        mode: QueryMode = QueryMode.INSTRUCTOR,
         instructions: str | None = None,
         goal_mode: GoalMode = "sample",
         seed: int = 0,
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         log.info(
-            "Generating queries: mode=%s, tuple_count=%s",
-            mode.value,
+            "Generating queries: tuple_count=%s",
             "streaming" if hasattr(tuples, "__aiter__") else len(tuples),  # type: ignore[arg-type]
         )
 
-        query_gen = build_query_generator(client=self.client, mode=mode)
+        query_gen = build_query_generator(client=self.client)
 
         goal_spec = await normalize_goal_spec(self.client, goals)
         focus_areas: list[GoalFocusArea] = (
@@ -143,7 +141,6 @@ class Evaluator:
         goal_guided = bool(focus_areas)
 
         run_metadata = QueryMetadata(
-            mode=mode.value,
             goal_guided=goal_guided,
             goal_mode=goal_mode,
             query_goals=(
@@ -203,7 +200,6 @@ class Evaluator:
         tuple_strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT,
         tuple_count: int = 20,
         seed: int = 0,
-        query_mode: QueryMode = QueryMode.INSTRUCTOR,
         goal_mode: GoalMode = "sample",
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
@@ -224,8 +220,6 @@ class Evaluator:
             Number of tuples to generate.
         seed
             Random seed for tuple sampling and goal sampling.
-        query_mode
-            Query generation mode.
         goal_mode
             Goal guidance mode ("sample" or "full").
         goals
@@ -246,7 +240,7 @@ class Evaluator:
         )
         async for q in self.queries(
             tuples=tuple_iter,
-            mode=query_mode,
+            mode=QueryMode.INSTRUCTOR,
             instructions=instructions,
             goal_mode=goal_mode,
             seed=seed,

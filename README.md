@@ -20,7 +20,7 @@ space, then use the `Evaluator` to generate options and queries:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode, TupleStrategy
+from evaluateur import Evaluator, TupleStrategy
 
 
 class Query(BaseModel):
@@ -48,7 +48,6 @@ async def main() -> None:
         tuple_strategy=TupleStrategy.CROSS_PRODUCT,
         tuple_count=50,
         seed=0,
-        query_mode=QueryMode.INSTRUCTOR,
         instructions="""
 Write realistic user questions.
 Keep them short but specific.
@@ -119,7 +118,7 @@ This helps ensure one run produces a mix of different stress-test styles.
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
 
 
 class Query(BaseModel):
@@ -139,7 +138,6 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        query_mode=QueryMode.INSTRUCTOR,
         seed=0,
         instructions="Make the question sound like a real user.",
         goals=goals,
@@ -201,7 +199,7 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
 
 
 class Query(BaseModel):
@@ -248,7 +246,6 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        query_mode=QueryMode.INSTRUCTOR,
         goals=goals,
     ):
         print(q.metadata.query_goals.model_dump() if q.metadata.query_goals else None)
@@ -264,7 +261,7 @@ Free-form goals (normalized with Instructor):
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode
+from evaluateur import Evaluator
 
 
 class Query(BaseModel):
@@ -279,7 +276,6 @@ async def main() -> None:
 
     i = 0
     async for q in evaluator.run(
-        query_mode=QueryMode.INSTRUCTOR,
         goals="""
 Components: prioritize freshness checks, grounded citations, and missing-source detection (don't proceed silently).
 Trajectories: include conflict handling and recovery behavior (re-try, switch tools, or escalate when evidence conflicts).
