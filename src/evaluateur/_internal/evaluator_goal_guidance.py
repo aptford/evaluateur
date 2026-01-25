@@ -70,13 +70,11 @@ class GoalSamplingContextBuilder:
         goal_spec: GoalSpec,
         focus_areas: list[GoalFocusArea],
         rng: random.Random,
-        max_chars_for_goals: int | None,
     ) -> None:
         self._base_context = base_context
         self._goal_spec = goal_spec
         self._focus_areas = focus_areas
         self._rng = rng
-        self._max_chars_for_goals = max_chars_for_goals
 
         weighted: list[tuple[GoalFocusArea, float]] = []
         for focus in focus_areas:
@@ -114,10 +112,7 @@ class GoalSamplingContextBuilder:
     def __call__(self, t: GeneratedTuple) -> tuple[str, Mapping[str, object]]:
         _ = t
         focus = self._choose_focus_area()
-        focus_prompt = self._goal_spec.render_focused_prompt(
-            focus_area=focus,
-            max_chars=self._max_chars_for_goals,
-        )
+        focus_prompt = self._goal_spec.render_focused_prompt(focus_area=focus)
         ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
         return ctx, {"goal_focus_area": focus}
 

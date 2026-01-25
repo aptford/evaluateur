@@ -205,7 +205,7 @@ class GoalSpec(BaseModel):
             )
         )
 
-    def render_prompt(self, *, max_chars: int | None = None) -> str:
+    def render_prompt(self) -> str:
         """Render this spec into a compact instruction block.
 
         The output is designed to be appended to the evaluator's domain context.
@@ -262,19 +262,7 @@ class GoalSpec(BaseModel):
                 chunks.append(textwrap.fill(self.outcomes.summary, width=96))
             chunks.extend(_render_items(self.outcomes.items))
 
-        rendered = "\n".join(chunks).strip() + "\n"
-        if not isinstance(max_chars, int):
-            return rendered
-        if len(rendered) <= max_chars:
-            return rendered
-
-        suffix = "…\n"
-        if max_chars <= 0:
-            return ""
-        if max_chars <= len(suffix):
-            return suffix[:max_chars]
-        cut = max_chars - len(suffix)
-        return rendered[:cut].rstrip() + suffix
+        return "\n".join(chunks).strip() + "\n"
 
     def available_focus_areas(self) -> list[GoalFocusArea]:
         """Return the goal layers that are non-empty (considering weights)."""
@@ -293,9 +281,7 @@ class GoalSpec(BaseModel):
             areas.append("outcomes")
         return areas
 
-    def render_focused_prompt(
-        self, *, focus_area: GoalFocusArea, max_chars: int | None = None
-    ) -> str:
+    def render_focused_prompt(self, *, focus_area: GoalFocusArea) -> str:
         """Render only a single goal layer (components/trajectories/outcomes).
 
         Intended for sampling mode, where each generated query is conditioned on a
@@ -352,19 +338,7 @@ class GoalSpec(BaseModel):
             chunks.append(textwrap.fill(layer.summary, width=96))
         chunks.extend(_render_items(layer.items))
 
-        rendered = "\n".join(chunks).strip() + "\n"
-        if not isinstance(max_chars, int):
-            return rendered
-        if len(rendered) <= max_chars:
-            return rendered
-
-        suffix = "…\n"
-        if max_chars <= 0:
-            return ""
-        if max_chars <= len(suffix):
-            return suffix[:max_chars]
-        cut = max_chars - len(suffix)
-        return rendered[:cut].rstrip() + suffix
+        return "\n".join(chunks).strip() + "\n"
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-serializable metadata representation."""

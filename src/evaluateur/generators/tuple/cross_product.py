@@ -65,7 +65,15 @@ class CrossProductTupleGenerator:
         rng.shuffle(indices)
         return indices
 
-    async def generate(self, options: BaseModel, count: int, *, seed: int = 0) -> AsyncIterator[GeneratedTuple]:
+    async def generate(
+        self,
+        options: BaseModel,
+        count: int,
+        *,
+        seed: int = 0,
+        instructions: str | None = None,
+    ) -> AsyncIterator[GeneratedTuple]:
+        _ = instructions
         field_names, value_lists = extract_dimension_values(options)
 
         # No dimensions: exactly one empty combination.

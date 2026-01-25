@@ -20,7 +20,7 @@ space, then use the `Evaluator` to generate options and queries:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode, TupleStrategy, RunConfig, OptionsConfig, TupleConfig, QueryConfig
+from evaluateur import Evaluator, QueryMode, TupleStrategy
 
 
 class Query(BaseModel):
@@ -34,30 +34,26 @@ class Query(BaseModel):
 
 
 async def main() -> None:
-    evaluator = Evaluator(Query, context="Healthcare prior authorization")
+    evaluator = Evaluator(Query)
 
     # Step 1: generate options for each dimension using Instructor
     options = await evaluator.options(
-        config=OptionsConfig(
-            instructions="Focus on common US payers and edge-case clinical scenarios.",
-            count_per_field=5,
-        ),
+        instructions="Focus on common US payers and edge-case clinical scenarios.",
+        count_per_field=5,
     )
 
     # Step 2: stream tuples -> natural language queries
     async for q in evaluator.run(
         options=options,
-        config=RunConfig(
-            tuples=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
-            queries=QueryConfig(
-                mode=QueryMode.INSTRUCTOR,
-                instructions="""
+        tuple_strategy=TupleStrategy.CROSS_PRODUCT,
+        tuple_count=50,
+        seed=0,
+        query_mode=QueryMode.INSTRUCTOR,
+        instructions="""
 Write realistic user questions.
 Keep them short but specific.
 Don't include any extra explanation outside the query itself.
 """,
-            ),
-        ),
     ):
         print(q.source_tuple.values, "->", q.query)
 
@@ -75,15 +71,20 @@ options and are not modified by `generate_options()`. Scalar fields of any
 basic type (`str`, `int`, `float`, and so on) are turned into lists of
 options automatically.
 
-### Instructions: options vs queries
+### Instructions
 
-Evaluateur uses two different instruction strings:
+Evaluateur accepts instructions at each stage:
 
-- **Option generation**: use `OptionsConfig.instructions` to guide what
+- **Option generation**: use `Evaluator.options(instructions=...)` to guide what
   _dimension values_ to propose (e.g. "Focus on common US payers.").
-- **Query generation**: use `QueryConfig.instructions` to guide how the
+- **Tuple generation**: use `Evaluator.tuples(instructions=...)` to guide how
+  tuples are sampled when the generator supports it.
+- **Query generation**: use `Evaluator.queries(instructions=...)` to guide how the
   _natural language query_ should be written (e.g. "Keep the question short
   and specific.").
+
+`Evaluator.run(instructions=...)` shares the same instruction string across all
+three stages.
 
 ## Tuple generation: seeded sampling for cross product
 
@@ -92,7 +93,7 @@ Evaluateur returns a **seeded randomized sample** of the cartesian product
 (_uniform without replacement_). This helps avoid always taking the "first N"
 combinations when the space is large.
 
-- To get reproducible results, set `TupleConfig(seed=...)`.
+- To get reproducible results, set `seed=...`.
 - Changing the seed gives you a different randomized subset.
 
 ## Goal-guided query optimization (Components / Trajectories / Outcomes)
@@ -118,7 +119,7 @@ This helps ensure one run produces a mix of different stress-test styles.
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode, RunConfig, QueryConfig
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
 
 
 class Query(BaseModel):
@@ -129,7 +130,7 @@ class Query(BaseModel):
 
 
 async def main() -> None:
-    evaluator = Evaluator(Query, context="Healthcare prior authorization")
+    evaluator = Evaluator(Query)
 
     goals = GoalSpec(
         components=GoalLayer(items=[GoalItem(name="freshness checks")]),
@@ -138,13 +139,9 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        config=RunConfig(
-            queries=QueryConfig(
-                mode=QueryMode.INSTRUCTOR,
-                goal_seed=0,
-                instructions="Make the question sound like a real user.",
-            ),
-        ),
+        query_mode=QueryMode.INSTRUCTOR,
+        seed=0,
+        instructions="Make the question sound like a real user.",
         goals=goals,
     ):
         print(q.metadata.goal_focus_area, "->", q.query)
@@ -165,7 +162,7 @@ It returns two things:
 - Optional per-query `metadata` (extra keys are allowed) that will be merged into `q.metadata`
 
 Evaluateur uses a context builder internally when you enable goal sampling
-(`QueryConfig(goal_mode="sample")`) so that each generated query can focus on a
+(`goal_mode="sample"`) so that each generated query can focus on a
 different goal area (components vs trajectories vs outcomes).
 
 If you write a custom query generator, accept `context_builder` and fall back to
@@ -204,7 +201,7 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode, RunConfig, QueryConfig
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
 
 
 class Query(BaseModel):
@@ -215,7 +212,7 @@ class Query(BaseModel):
 
 
 async def main() -> None:
-    evaluator = Evaluator(Query, context="Healthcare prior authorization")
+    evaluator = Evaluator(Query)
 
     goals = GoalSpec(
         components=GoalLayer(
@@ -251,9 +248,7 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        config=RunConfig(
-            queries=QueryConfig(mode=QueryMode.INSTRUCTOR),
-        ),
+        query_mode=QueryMode.INSTRUCTOR,
         goals=goals,
     ):
         print(q.metadata.query_goals.model_dump() if q.metadata.query_goals else None)
@@ -269,7 +264,7 @@ Free-form goals (normalized with Instructor):
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode, RunConfig, QueryConfig
+from evaluateur import Evaluator, QueryMode
 
 
 class Query(BaseModel):
@@ -280,13 +275,11 @@ class Query(BaseModel):
 
 
 async def main() -> None:
-    evaluator = Evaluator(Query, context="Healthcare prior authorization")
+    evaluator = Evaluator(Query)
 
     i = 0
     async for q in evaluator.run(
-        config=RunConfig(
-            queries=QueryConfig(mode=QueryMode.INSTRUCTOR),
-        ),
+        query_mode=QueryMode.INSTRUCTOR,
         goals="""
 Components: prioritize freshness checks, grounded citations, and missing-source detection (don't proceed silently).
 Trajectories: include conflict handling and recovery behavior (re-try, switch tools, or escalate when evidence conflicts).

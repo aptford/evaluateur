@@ -7,7 +7,6 @@ import pytest
 from pydantic import BaseModel, Field
 
 from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
-from evaluateur.configs import OptionsConfig, QueryConfig, RunConfig, TupleConfig
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 from evaluateur.generators.tuples import CrossProductTupleGenerator
 from evaluateur.models import GeneratedQuery
@@ -55,9 +54,8 @@ def test_create_options_model_turns_scalars_into_lists() -> None:
 
 
 def test_evaluator_instantiation() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+    evaluator = Evaluator(Query)
     assert evaluator.model is Query
-    assert evaluator.context == "Test context"
 
 
 class TestCrossProductTupleGenerator:
@@ -109,7 +107,7 @@ class TestEvaluatorGenerateTuples:
 
     @pytest.fixture
     def evaluator(self) -> Evaluator:
-        return Evaluator(Query, context="Test context")
+        return Evaluator(Query)
 
     async def test_generate_tuples_with_options(self, evaluator: Evaluator) -> None:
         """Test tuples() with pre-provided options."""
@@ -119,7 +117,8 @@ class TestEvaluatorGenerateTuples:
             t
             async for t in evaluator.tuples(
                 options,
-                config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=2),
+                strategy=TupleStrategy.CROSS_PRODUCT,
+                count=2,
             )
         ]
 
@@ -134,7 +133,7 @@ class TestEvaluatorGenerateTuples:
     ) -> None:
         """Test that tuples() returns an async iterator."""
         options = SimpleOptions()
-        gen = evaluator.tuples(options, config=TupleConfig(count=2))
+        gen = evaluator.tuples(options, count=2)
 
         assert hasattr(gen, "__anext__")
 
@@ -160,7 +159,7 @@ async def test_cross_product_does_not_materialize_full_space() -> None:
 
 
 async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+    evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
         async def generate(  # type: ignore[no-untyped-def]
@@ -208,7 +207,7 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
 
 
 async def test_evaluator_queries_includes_instructions_in_context() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+    evaluator = Evaluator(Query)
 
     captured: list[str] = []
 
@@ -229,18 +228,17 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
             q
             async for q in evaluator.queries(
                 tuples=[t1],
-                config=QueryConfig(instructions="Keep it short."),
+                instructions="Keep it short.",
             )
         ]
 
     assert len(captured) == 1
-    assert "Test context" in captured[0]
     assert "<instructions>" in captured[0]
     assert "Keep it short." in captured[0]
 
 
 async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+    evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
         async def generate(  # type: ignore[no-untyped-def]
@@ -269,7 +267,8 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
             async for q in evaluator.queries(
                 tuples=tuples,
                 goals=goals,
-                config=QueryConfig(goal_mode="sample", goal_seed=123),
+                goal_mode="sample",
+                seed=123,
             )
         ]
 
@@ -286,7 +285,7 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
 
 
 async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+    evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
         async def generate(  # type: ignore[no-untyped-def]
@@ -318,7 +317,8 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
             async for q in evaluator.queries(
                 tuples=tuples,
                 goals=goals,
-                config=QueryConfig(goal_mode="sample", goal_seed=123),
+                goal_mode="sample",
+                seed=123,
             )
         ]
 
@@ -333,67 +333,26 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
     assert counts.get("components", 0) > counts.get("trajectories", 0)
 
 
-async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None:
-    evaluator = Evaluator(Query, context="Test context")
+async def test_run_with_options_instructions() -> None:
+    """Test that run() uses option instructions for option generation."""
 
-    captured: list[str] = []
+    evaluator = Evaluator(Query)
 
-    class DummyQueryGenerator:
-        async def generate(  # type: ignore[no-untyped-def]
-            self, tuples, context, *, context_builder=None
-        ):
-            assert context_builder is not None
-            async for t in tuples:
-                ctx, _ = context_builder(t)
-                captured.append(ctx)
-                yield GeneratedQuery(query="x", source_tuple=t)
-
-    long_summary = "x" * 10_000
-    goals = GoalSpec(
-        components=GoalLayer(summary=long_summary, items=[GoalItem(name="c")]),
+    OptionsModel = create_options_model(Query)
+    fake_options = OptionsModel(
+        payer=["Cigna"],
+        age=["adult"],
+        complexity=["simple"],
+        geography=["CA"],
     )
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    captured: dict[str, str | None] = {"instructions": None}
 
-    with patch(
-        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    async def _fake_options(  # type: ignore[no-untyped-def]
+        *, instructions: str | None = None, count_per_field: int = 5
     ):
-        _ = [
-            q
-            async for q in evaluator.queries(
-                tuples=[t1],
-                goals=goals,
-                config=QueryConfig(max_chars_for_goals=64),
-            )
-        ]
-
-    assert len(captured) == 1
-    assert "…" in captured[0]
-    assert long_summary not in captured[0]
-
-
-async def test_query_instructions_do_not_apply_to_option_generation() -> None:
-    """Regression test: query-writing instructions must not affect option generation.
-
-    Query instructions live on QueryConfig and are meant for query-writing.
-    When `options` are not provided, the evaluator may generate options first;
-    those should be controlled only by OptionsConfig.instructions.
-    """
-
-    evaluator = Evaluator(Query, context="Test context")
-
-    OptionsModel = create_options_model(Query)
-    fake_options = OptionsModel(
-        payer=["Cigna"],
-        age=["adult"],
-        complexity=["simple"],
-        geography=["CA"],
-    )
-
-    captured: dict[str, str | None] = {"instructions": None}
-
-    async def _fake_options(*, config: OptionsConfig):  # type: ignore[no-untyped-def]
-        captured["instructions"] = config.instructions
+        _ = count_per_field
+        captured["instructions"] = instructions
         return fake_options
 
     class DummyQueryGenerator:
@@ -413,58 +372,8 @@ async def test_query_instructions_do_not_apply_to_option_generation() -> None:
                 q
                 async for q in evaluator.run(
                     options=None,
-                    config=RunConfig(
-                        tuples=TupleConfig(count=1),
-                        queries=QueryConfig(
-                            instructions="Keep them short and specific."
-                        ),
-                    ),
-                )
-            ]
-
-    assert captured["instructions"] is None
-
-
-async def test_run_with_options_config() -> None:
-    """Test that run() uses OptionsConfig for option generation."""
-
-    evaluator = Evaluator(Query, context="Test context")
-
-    OptionsModel = create_options_model(Query)
-    fake_options = OptionsModel(
-        payer=["Cigna"],
-        age=["adult"],
-        complexity=["simple"],
-        geography=["CA"],
-    )
-
-    captured: dict[str, str | None] = {"instructions": None}
-
-    async def _fake_options(*, config: OptionsConfig):  # type: ignore[no-untyped-def]
-        captured["instructions"] = config.instructions
-        return fake_options
-
-    class DummyQueryGenerator:
-        async def generate(  # type: ignore[no-untyped-def]
-            self, tuples, context, *, context_builder=None
-        ):
-            _ = context, context_builder
-            async for t in tuples:
-                yield GeneratedQuery(query="x", source_tuple=t)
-
-    with patch.object(evaluator, "options", new=AsyncMock(side_effect=_fake_options)):
-        with patch(
-            "evaluateur.evaluator.build_query_generator",
-            return_value=DummyQueryGenerator(),
-        ):
-            _ = [
-                q
-                async for q in evaluator.run(
-                    options=None,
-                    config=RunConfig(
-                        options=OptionsConfig(instructions="Focus on US payers."),
-                        tuples=TupleConfig(count=1),
-                    ),
+                    instructions="Focus on US payers.",
+                    tuple_count=1,
                 )
             ]
 

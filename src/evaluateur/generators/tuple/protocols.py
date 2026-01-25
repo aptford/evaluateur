@@ -19,6 +19,7 @@ class TupleGenerator(Protocol[ModelT]):
         count: int,
         *,
         seed: int = 0,
+        instructions: str | None = None,
     ) -> AsyncIterator[GeneratedTuple[ModelT]]:
         """Generate tuples asynchronously, yielding one at a time."""
 

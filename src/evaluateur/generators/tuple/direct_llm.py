@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 
 from pydantic import BaseModel, create_model
 
@@ -32,7 +33,14 @@ class DirectLLMTupleGenerator:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
-    async def generate(self, options: BaseModel, count: int, *, seed: int = 0):
+    async def generate(
+        self,
+        options: BaseModel,
+        count: int,
+        *,
+        seed: int = 0,
+        instructions: str | None = None,
+    ) -> AsyncIterator[GeneratedTuple]:
         # Note: `seed` is accepted for API consistency with other tuple generators,
         # but is not currently used because the LLM backend is non-deterministic.
         _ = seed
@@ -50,6 +58,11 @@ class DirectLLMTupleGenerator:
             "You are generating structured synthetic test cases for an evaluation suite. "
             "Each test case is a tuple that selects exactly one value for every dimension."
         )
+        if instructions:
+            system_message += (
+                "\nAdditional instructions:\n"
+                f"<instructions>\n{instructions}\n</instructions>\n"
+            )
         user_message = (
             "Using the following options per dimension, generate diverse tuples. "
             f"Return around {count} combinations, preferring realistic and high-value cases.\n\n"
