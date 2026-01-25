@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
-from evaluateur.configs import QueryConfig, TupleConfig
+from evaluateur.configs import OptionsConfig, QueryConfig, RunConfig, TupleConfig
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
 from evaluateur.generators.tuples import CrossProductTupleGenerator
 from evaluateur.models import GeneratedQuery
@@ -49,14 +49,12 @@ def test_create_options_model_turns_scalars_into_lists() -> None:
     assert "payer" in fields
     assert "age" in fields
 
-    # All fields should now be list[...] types
     for name in ("payer", "age", "complexity", "geography"):
         annotation = fields[name].annotation
         assert getattr(annotation, "__origin__", None) in (list, List)
 
 
 def test_evaluator_instantiation() -> None:
-    # This should not touch any external services when only instantiating.
     evaluator = Evaluator(Query, context="Test context")
     assert evaluator.model is Query
     assert evaluator.context == "Test context"
@@ -79,10 +77,8 @@ class TestCrossProductTupleGenerator:
         """Test that cross product generates expected combinations."""
         tuples = [t async for t in generator.generate(options, count=0)]
 
-        # 2 payers x 2 ages = 4 combinations
         assert len(tuples) == 4
 
-        # Check all combinations are present
         values_set = {(t.values["payer"], t.values["age"]) for t in tuples}
         expected = {
             ("Cigna", "adult"),
@@ -140,10 +136,8 @@ class TestEvaluatorGenerateTuples:
         options = SimpleOptions()
         gen = evaluator.tuples(options, config=TupleConfig(count=2))
 
-        # Should be an async generator
         assert hasattr(gen, "__anext__")
 
-        # Should be iterable with async for
         count = 0
         async for _ in gen:
             count += 1
@@ -204,10 +198,8 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
     assert results[1].source_tuple.values["payer"] == "Aetna"
 
     for q in results:
-        # Per-query metadata is preserved (extra keys)
         assert q.metadata.generator == "dummy"
-        # Run metadata is injected per item
-        assert q.metadata.mode == "instructor"  # default QueryConfig.mode
+        assert q.metadata.mode == "instructor"
         assert q.metadata.goal_guided is True
         assert q.metadata.goal_mode == "sample"
         assert isinstance(q.metadata.query_goals, GoalSpec)
@@ -289,7 +281,6 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
         assert q.metadata.goal_focus_area in counts
         counts[q.metadata.goal_focus_area] += 1
 
-    # The sampling is weighted; components should dominate with a much larger weight.
     assert counts["components"] > counts["trajectories"]
     assert counts["components"] > counts["outcomes"]
 
@@ -337,12 +328,8 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
             counts.get(q.metadata.goal_focus_area, 0) + 1
         )
 
-    # Summary-only trajectories should be eligible (default weight 1.0), even though
-    # it has no positive-weight items.
     assert counts.get("trajectories", 0) > 0
-    # Outcomes has neither summary nor positive-weight items, so it should never appear.
     assert counts.get("outcomes", 0) == 0
-    # Components has weight 10.0 vs trajectories weight 1.0, so components should dominate.
     assert counts.get("components", 0) > counts.get("trajectories", 0)
 
 
@@ -361,7 +348,6 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
                 captured.append(ctx)
                 yield GeneratedQuery(query="x", source_tuple=t)
 
-    # Ensure the goal prompt is long enough to require truncation.
     long_summary = "x" * 10_000
     goals = GoalSpec(
         components=GoalLayer(summary=long_summary, items=[GoalItem(name="c")]),
@@ -382,10 +368,7 @@ async def test_query_config_max_chars_truncates_goal_prompt_in_context() -> None
         ]
 
     assert len(captured) == 1
-    # The goal prompt truncation uses an ellipsis suffix (newline is stripped by
-    # compose_query_context()).
     assert "…" in captured[0]
-    # We shouldn't see the full unbounded summary reflected in the context.
     assert long_summary not in captured[0]
 
 
@@ -394,7 +377,7 @@ async def test_query_instructions_do_not_apply_to_option_generation() -> None:
 
     Query instructions live on QueryConfig and are meant for query-writing.
     When `options` are not provided, the evaluator may generate options first;
-    those should be controlled only by TupleConfig.instructions.
+    those should be controlled only by OptionsConfig.instructions.
     """
 
     evaluator = Evaluator(Query, context="Test context")
@@ -409,8 +392,8 @@ async def test_query_instructions_do_not_apply_to_option_generation() -> None:
 
     captured: dict[str, str | None] = {"instructions": None}
 
-    async def _fake_options(*, config):  # type: ignore[no-untyped-def]
-        captured["instructions"] = getattr(config, "instructions", None)
+    async def _fake_options(*, config: OptionsConfig):  # type: ignore[no-untyped-def]
+        captured["instructions"] = config.instructions
         return fake_options
 
     class DummyQueryGenerator:
@@ -421,8 +404,6 @@ async def test_query_instructions_do_not_apply_to_option_generation() -> None:
             async for t in tuples:
                 yield GeneratedQuery(query="x", source_tuple=t)
 
-    # Patch `Evaluator.options()` to observe what instruction string would be used
-    # for option generation. Then patch query generation so we don't call any LLM.
     with patch.object(evaluator, "options", new=AsyncMock(side_effect=_fake_options)):
         with patch(
             "evaluateur.evaluator.build_query_generator",
@@ -432,11 +413,59 @@ async def test_query_instructions_do_not_apply_to_option_generation() -> None:
                 q
                 async for q in evaluator.run(
                     options=None,
-                    tuple_config=TupleConfig(count=1),
-                    query_config=QueryConfig(
-                        instructions="Keep them short and specific."
+                    config=RunConfig(
+                        tuples=TupleConfig(count=1),
+                        queries=QueryConfig(
+                            instructions="Keep them short and specific."
+                        ),
                     ),
                 )
             ]
 
     assert captured["instructions"] is None
+
+
+async def test_run_with_options_config() -> None:
+    """Test that run() uses OptionsConfig for option generation."""
+
+    evaluator = Evaluator(Query, context="Test context")
+
+    OptionsModel = create_options_model(Query)
+    fake_options = OptionsModel(
+        payer=["Cigna"],
+        age=["adult"],
+        complexity=["simple"],
+        geography=["CA"],
+    )
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    async def _fake_options(*, config: OptionsConfig):  # type: ignore[no-untyped-def]
+        captured["instructions"] = config.instructions
+        return fake_options
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            _ = context, context_builder
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    with patch.object(evaluator, "options", new=AsyncMock(side_effect=_fake_options)):
+        with patch(
+            "evaluateur.evaluator.build_query_generator",
+            return_value=DummyQueryGenerator(),
+        ):
+            _ = [
+                q
+                async for q in evaluator.run(
+                    options=None,
+                    config=RunConfig(
+                        options=OptionsConfig(instructions="Focus on US payers."),
+                        tuples=TupleConfig(count=1),
+                    ),
+                )
+            ]
+
+    assert captured["instructions"] == "Focus on US payers."

@@ -20,8 +20,7 @@ space, then use the `Evaluator` to generate options and queries:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode, TupleStrategy
-from evaluateur.configs import QueryConfig, TupleConfig
+from evaluateur import Evaluator, QueryMode, TupleStrategy, RunConfig, OptionsConfig, TupleConfig, QueryConfig
 
 
 class Query(BaseModel):
@@ -39,23 +38,25 @@ async def main() -> None:
 
     # Step 1: generate options for each dimension using Instructor
     options = await evaluator.options(
-        config=TupleConfig(
-            options_instructions="Focus on common US payers and edge-case clinical scenarios.",
-            options_per_field=5,
+        config=OptionsConfig(
+            instructions="Focus on common US payers and edge-case clinical scenarios.",
+            count_per_field=5,
         ),
     )
 
     # Step 2: stream tuples -> natural language queries
     async for q in evaluator.run(
         options=options,
-        tuple_config=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
-        query_config=QueryConfig(
-            mode=QueryMode.INSTRUCTOR,
-            instructions="""
+        config=RunConfig(
+            tuples=TupleConfig(strategy=TupleStrategy.CROSS_PRODUCT, count=50, seed=0),
+            queries=QueryConfig(
+                mode=QueryMode.INSTRUCTOR,
+                instructions="""
 Write realistic user questions.
 Keep them short but specific.
 Don't include any extra explanation outside the query itself.
 """,
+            ),
         ),
     ):
         print(q.source_tuple.values, "->", q.query)
@@ -78,18 +79,17 @@ options automatically.
 
 Evaluateur uses two different instruction strings:
 
-- **Option generation**: use `TupleConfig.options_instructions` (either via
-  `Evaluator.options(config=...)` or via `Evaluator.run(..., tuple_config=...)`)
-  to guide what *dimension values* to propose (e.g. “Focus on common US payers.”).
-- **Query generation**: use `QueryConfig.instructions` (either via
-  `Evaluator.run(..., query_config=...)` or `Evaluator.queries(..., config=...)`) to guide how the *natural language
-  query* should be written (e.g. “Keep the question short and specific.”).
+- **Option generation**: use `OptionsConfig.instructions` to guide what
+  _dimension values_ to propose (e.g. "Focus on common US payers.").
+- **Query generation**: use `QueryConfig.instructions` to guide how the
+  _natural language query_ should be written (e.g. "Keep the question short
+  and specific.").
 
 ## Tuple generation: seeded sampling for cross product
 
 When `TupleStrategy.CROSS_PRODUCT` is used and `0 < count < total_combinations`,
 Evaluateur returns a **seeded randomized sample** of the cartesian product
-(*uniform without replacement*). This helps avoid always taking the “first N”
+(_uniform without replacement_). This helps avoid always taking the "first N"
 combinations when the space is large.
 
 - To get reproducible results, set `TupleConfig(seed=...)`.
@@ -105,21 +105,20 @@ If you provide `GoalItem.examples`, they are included in the internal goal promp
 
 When you pass **free-form text** for `goals`, Evaluateur will ask an LLM to convert it into a structured
 `GoalSpec`. For best results, include concrete example user questions and any measurable acceptance criteria
-(e.g. “cite policy section,” “ask a clarifying question if payer is missing,” “return a checklist”). This helps
+(e.g. "cite policy section," "ask a clarifying question if payer is missing," "return a checklist"). This helps
 produce low-overlap goals across components vs trajectories vs outcomes.
 
 ### Sampling goals per query (diversity mode)
 
 By default, Evaluateur picks a single focus area
-(**components**, **trajectories**, or **outcomes**) *per generated query*.
+(**components**, **trajectories**, or **outcomes**) _per generated query_.
 This helps ensure one run produces a mix of different stress-test styles.
 
 ```python
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
-from evaluateur.configs import QueryConfig
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode, RunConfig, QueryConfig
 
 
 class Query(BaseModel):
@@ -139,10 +138,12 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        query_config=QueryConfig(
-            mode=QueryMode.INSTRUCTOR,
-            goal_seed=0,
-            instructions="Make the question sound like a real user.",
+        config=RunConfig(
+            queries=QueryConfig(
+                mode=QueryMode.INSTRUCTOR,
+                goal_seed=0,
+                instructions="Make the question sound like a real user.",
+            ),
         ),
         goals=goals,
     ):
@@ -203,8 +204,7 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode
-from evaluateur.configs import QueryConfig
+from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec, QueryMode, RunConfig, QueryConfig
 
 
 class Query(BaseModel):
@@ -251,8 +251,8 @@ async def main() -> None:
     )
 
     async for q in evaluator.run(
-        query_config=QueryConfig(
-            mode=QueryMode.INSTRUCTOR,
+        config=RunConfig(
+            queries=QueryConfig(mode=QueryMode.INSTRUCTOR),
         ),
         goals=goals,
     ):
@@ -269,8 +269,7 @@ Free-form goals (normalized with Instructor):
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, QueryMode
-from evaluateur.configs import QueryConfig
+from evaluateur import Evaluator, QueryMode, RunConfig, QueryConfig
 
 
 class Query(BaseModel):
@@ -285,11 +284,11 @@ async def main() -> None:
 
     i = 0
     async for q in evaluator.run(
-        query_config=QueryConfig(
-            mode=QueryMode.INSTRUCTOR,
+        config=RunConfig(
+            queries=QueryConfig(mode=QueryMode.INSTRUCTOR),
         ),
         goals="""
-Components: prioritize freshness checks, grounded citations, and missing-source detection (don’t proceed silently).
+Components: prioritize freshness checks, grounded citations, and missing-source detection (don't proceed silently).
 Trajectories: include conflict handling and recovery behavior (re-try, switch tools, or escalate when evidence conflicts).
 Outcomes: produce checklist-ready outputs that are easy to review and hard to misuse.
 """,

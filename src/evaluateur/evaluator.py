@@ -8,7 +8,7 @@ from typing import Type, TypeVar
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
-from evaluateur.configs import QueryConfig, TupleConfig
+from evaluateur.configs import OptionsConfig, QueryConfig, RunConfig, TupleConfig
 from evaluateur.generators import OptionsGenerator
 from evaluateur.generators.query.context import compose_query_context
 from evaluateur.goals import GoalFocusArea, GoalSpec
@@ -53,7 +53,9 @@ class Evaluator:
             self.client.model_name,
         )
 
-    async def options(self, *, config: TupleConfig = TupleConfig()) -> BaseModel:
+    async def options(
+        self, *, config: OptionsConfig = OptionsConfig()
+    ) -> BaseModel:
         """Generate an options ``BaseModel`` from the configured query model.
 
         Every simple field on the input model is turned into a sequence of
@@ -62,12 +64,12 @@ class Evaluator:
         log.info(
             "Generating options for %s (n=%d)",
             self.model.__name__,
-            config.options_per_field,
+            config.count_per_field,
         )
         result = await self._options_generator.generate_options(
             self.model,
             instructions=config.instructions,
-            count_per_field=config.options_per_field,
+            count_per_field=config.count_per_field,
         )
         log.debug("Generated options: %s", result)
         return result
@@ -76,7 +78,7 @@ class Evaluator:
         self,
         maybe_options: BaseModel | None,
         *,
-        config: TupleConfig,
+        config: OptionsConfig,
     ) -> BaseModel:
         """Ensure options are available, generating them if not provided."""
         if maybe_options is not None:
@@ -85,29 +87,23 @@ class Evaluator:
 
     async def tuples(
         self,
-        options: BaseModel | None = None,
+        options: BaseModel,
         *,
         config: TupleConfig = TupleConfig(),
     ) -> AsyncIterator[GeneratedTuple]:
-        """Generate tuples as an async iterator, yielding one at a time.
-
-        If `options` is omitted, the evaluator will first generate options.
-        """
+        """Generate tuples as an async iterator, yielding one at a time."""
         log.info(
             "Generating tuples: strategy=%s, count=%d",
             config.strategy.value,
             config.count,
         )
 
-        options_instance = await self._ensure_options(options, config=config)
-        log.debug("Using options: %s", options_instance)
+        log.debug("Using options: %s", options)
 
         tuple_gen = build_tuple_generator(client=self.client, strategy=config.strategy)
         generated_count = 0
 
-        async for t in tuple_gen.generate(
-            options_instance, config.count, seed=config.seed
-        ):
+        async for t in tuple_gen.generate(options, config.count, seed=config.seed):
             generated_count += 1
             yield t
 
@@ -145,8 +141,6 @@ class Evaluator:
             ),
         )
 
-        # Base context is shared across the run; goal sampling can append a
-        # per-tuple focused goal prompt via the context_builder.
         base_context = compose_query_context(
             self.context,
             instructions=config.instructions,
@@ -180,7 +174,6 @@ class Evaluator:
 
         goal_prompt: str | None = None
         if config.goal_mode == "full" and goal_spec is not None:
-            # Full mode conditions the entire run on all goals at once.
             goal_prompt = goal_spec.render_prompt(max_chars=config.max_chars_for_goals)
 
         effective_context = compose_query_context(base_context, goal_prompt=goal_prompt)
@@ -199,26 +192,29 @@ class Evaluator:
         self,
         *,
         options: BaseModel | None = None,
-        tuple_config: TupleConfig = TupleConfig(),
-        query_config: QueryConfig = QueryConfig(),
+        config: RunConfig = RunConfig(),
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         """Convenience wrapper: options → tuples → queries (streaming).
 
-        Notes
-        -----
-        Instructions are configured via the config objects:
-        - Use ``QueryConfig.instructions`` to guide query writing.
-        - Use ``TupleConfig.options_instructions`` to guide option generation.
+        Parameters
+        ----------
+        options
+            Pre-generated options model instance. If not provided, options
+            will be generated using ``config.options``.
+        config
+            Unified configuration for the run. Use ``config.options`` to
+            configure option generation, ``config.tuples`` for tuple
+            generation, and ``config.queries`` for query generation.
+        goals
+            Goal specification for guided query generation.
         """
 
-        tuple_iter = self.tuples(
-            options,
-            config=tuple_config,
-        )
+        options_instance = await self._ensure_options(options, config=config.options)
+        tuple_iter = self.tuples(options_instance, config=config.tuples)
         async for q in self.queries(
             tuples=tuple_iter,
-            config=query_config,
+            config=config.queries,
             goals=goals,
         ):
             yield q
