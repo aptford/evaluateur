@@ -5,7 +5,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from evaluateur.models import GeneratedTuple
+from evaluateur.queries.models import GeneratedTuple
 
 
 class TupleGenerator(Protocol):
@@ -20,4 +20,3 @@ class TupleGenerator(Protocol):
         instructions: str | None = None,
     ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples asynchronously, yielding one at a time."""
-

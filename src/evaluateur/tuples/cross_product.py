@@ -9,8 +9,8 @@ from collections.abc import AsyncIterator
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
-from evaluateur.generators.tuple.options_adapter import extract_dimension_values
-from evaluateur.models import GeneratedTuple
+from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.options_adapter import extract_dimension_values
 
 log = logging.getLogger(__name__)
 
@@ -116,4 +116,3 @@ class CrossProductTupleGenerator:
             yield GeneratedTuple(values={name: value for name, value in zip(field_names, combo)})
 
         log.debug("CrossProductTupleGenerator: yielded %d tuples", yielded)
-

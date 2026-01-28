@@ -4,9 +4,9 @@ import math
 import random
 from collections.abc import Mapping
 
-from evaluateur.generators.query.context import compose_query_context
+from evaluateur.queries.context import compose_query_context
 from evaluateur.goals.models import GoalFocusArea, GoalFocusPlan, GoalSpec
-from evaluateur.models import GeneratedTuple
+from evaluateur.queries.models import GeneratedTuple
 
 
 class WeightedSampler:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from evaluateur.models import GeneratedTuple
+from evaluateur.queries.models import GeneratedTuple
 
 
 def _format_scalar_for_prompt(value: object) -> str:

@@ -102,4 +102,3 @@ def create_options_model(model: Type[ModelT], name_suffix: str = "Options") -> T
 
     options_model_name = f"{model.__name__}{name_suffix}"
     return create_model(options_model_name, __base__=BaseModel, **fields)
-

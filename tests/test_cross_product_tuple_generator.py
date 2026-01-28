@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from evaluateur.generators.tuples import CrossProductTupleGenerator
+from evaluateur.tuples import CrossProductTupleGenerator
 
 
 class SmallOptions(BaseModel):

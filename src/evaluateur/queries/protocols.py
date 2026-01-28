@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import Protocol, TypeAlias
 
-from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
-
+from evaluateur.queries.models import GeneratedQuery, GeneratedTuple, QueryMetadata
 
 ContextBuilderMetadata: TypeAlias = Mapping[str, object] | QueryMetadata
 ContextBuilderResult: TypeAlias = tuple[str, ContextBuilderMetadata]
@@ -24,4 +23,3 @@ class QueryGenerator(Protocol):
         context_builder: ContextBuilder | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         """Generate queries asynchronously from tuples (streaming)."""
-

@@ -173,8 +173,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from evaluateur.generators.query.protocols import ContextBuilder
-from evaluateur.models import GeneratedQuery, GeneratedTuple
+from evaluateur.queries import ContextBuilder, GeneratedQuery, GeneratedTuple
 
 
 class MyQueryGenerator:

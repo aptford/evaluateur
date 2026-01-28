@@ -4,10 +4,10 @@ import logging
 import random
 
 from evaluateur.client import LLMClient
-from evaluateur.generators.query.context import compose_query_context
+from evaluateur.queries.context import compose_query_context
 from evaluateur.goals.models import GoalFocusArea, GoalGuidancePlan, GoalMode, GoalSpec
 from evaluateur.goals.sampling import GoalSamplingContextBuilder, resolve_focus_plan
-from evaluateur.models import QueryMetadata
+from evaluateur.queries.models import QueryMetadata
 
 log = logging.getLogger(__name__)
 

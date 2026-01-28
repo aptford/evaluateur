@@ -5,7 +5,7 @@ from typing import cast
 
 from pydantic import BaseModel
 
-from evaluateur.types import ScalarValue
+from evaluateur.options.types import ScalarValue
 
 
 def extract_dimension_values(options: BaseModel) -> tuple[list[str], list[list[ScalarValue]]]:
@@ -28,4 +28,3 @@ def extract_dimension_values(options: BaseModel) -> tuple[list[str], list[list[S
         value_lists.append([cast(ScalarValue, v) for v in list(value)])
 
     return field_names, value_lists
-

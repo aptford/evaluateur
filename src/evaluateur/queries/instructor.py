@@ -7,10 +7,9 @@ from inspect import isawaitable
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
-from evaluateur.generators.query.prompts import build_instructor_messages_for_tuple
-from evaluateur.generators.query.protocols import ContextBuilder
-from evaluateur.models import GeneratedQuery, GeneratedTuple
-from evaluateur.models import QueryMetadata
+from evaluateur.queries.models import GeneratedQuery, GeneratedTuple, QueryMetadata
+from evaluateur.queries.prompts import build_instructor_messages_for_tuple
+from evaluateur.queries.protocols import ContextBuilder
 
 log = logging.getLogger(__name__)
 
@@ -80,4 +79,3 @@ class InstructorQueryGenerator:
                 source_tuple=t,
                 metadata=metadata,
             )
-

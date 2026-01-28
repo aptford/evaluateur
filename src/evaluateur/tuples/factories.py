@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from evaluateur.client import LLMClient
-from evaluateur.generators import QueryMode, TupleStrategy
-from evaluateur.generators.queries import InstructorQueryGenerator, QueryGenerator
-from evaluateur.generators.tuples import (
-    CrossProductTupleGenerator,
-    DirectLLMTupleGenerator,
-    TupleGenerator,
-)
+from evaluateur.tuples.cross_product import CrossProductTupleGenerator
+from evaluateur.tuples.direct_llm import DirectLLMTupleGenerator
+from evaluateur.tuples.protocols import TupleGenerator
+from evaluateur.tuples.strategy import TupleStrategy
 
 
 def build_tuple_generator(
@@ -26,15 +23,3 @@ def build_tuple_generator(
         return DirectLLMTupleGenerator(client=client)
 
     raise ValueError(f"Unsupported tuple strategy: {strategy}")
-
-
-def build_query_generator(
-    *,
-    client: LLMClient,
-    mode: QueryMode = QueryMode.INSTRUCTOR,
-) -> QueryGenerator:
-    """Create a query generator instance for the given mode."""
-
-    if mode == QueryMode.INSTRUCTOR:
-        return InstructorQueryGenerator(client)
-    raise ValueError(f"Unsupported query mode: {mode}")

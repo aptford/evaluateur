@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from .client import LLMClient
 from .evaluator import Evaluator
-from .factories import build_query_generator, build_tuple_generator
-from .generators import QueryMode, TupleStrategy
+from .queries import QueryMode, build_query_generator
+from .queries.models import GeneratedQuery, GeneratedTuple
+from .tuples import TupleStrategy, build_tuple_generator
 from .goals import GoalItem, GoalLayer, GoalSpec
-from .models import GeneratedQuery, GeneratedTuple
 
 __all__ = [
     "Evaluator",

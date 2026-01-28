@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Generic, Literal, TypeVar
+from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from evaluateur.goals.models import GoalFocusArea, GoalMode, GoalSpec
-from evaluateur.types import ScalarValue
+from evaluateur.options.types import ScalarValue
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)

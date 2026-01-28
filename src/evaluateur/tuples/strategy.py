@@ -8,4 +8,3 @@ class TupleStrategy(str, Enum):
 
     CROSS_PRODUCT = "cross_product"
     DIRECT_LLM = "direct_llm"
-

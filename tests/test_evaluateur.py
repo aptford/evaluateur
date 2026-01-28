@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field
 
 from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
 from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
-from evaluateur.generators.tuples import CrossProductTupleGenerator
-from evaluateur.models import GeneratedQuery
-from evaluateur.types import create_options_model, is_iterator_field
+from evaluateur.queries.models import GeneratedQuery
+from evaluateur.tuples import CrossProductTupleGenerator
+from evaluateur.options.types import create_options_model, is_iterator_field
 
 
 class Query(BaseModel):

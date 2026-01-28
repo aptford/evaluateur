@@ -11,8 +11,8 @@ from evaluateur.goals.parsing import build_goal_spec_messages
 from evaluateur.goals.rendering import render_focused_goal_prompt, render_goal_prompt
 
 if TYPE_CHECKING:
-    from evaluateur.generators.query.protocols import ContextBuilder
-    from evaluateur.models import QueryMetadata
+    from evaluateur.queries.protocols import ContextBuilder
+    from evaluateur.queries.models import QueryMetadata
 
 GoalFocusArea = Literal["components", "trajectories", "outcomes"]
 GoalMode = Literal["full", "sample"]

@@ -6,9 +6,9 @@ from collections.abc import AsyncIterator
 from pydantic import BaseModel, create_model
 
 from evaluateur.client import LLMClient
-from evaluateur.generators.tuple.options_adapter import extract_dimension_values
-from evaluateur.models import GeneratedTuple
-from evaluateur.types import ScalarValue
+from evaluateur.options.types import ScalarValue
+from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.options_adapter import extract_dimension_values
 
 log = logging.getLogger(__name__)
 
@@ -87,4 +87,3 @@ class DirectLLMTupleGenerator:
 
         for t in result.tuples:
             yield GeneratedTuple(values=t.model_dump())
-
