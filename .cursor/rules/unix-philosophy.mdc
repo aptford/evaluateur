@@ -1,0 +1,55 @@
+---
+description: Unix philosophy for all code
+alwaysApply: true
+---
+
+# Unix Philosophy Rules
+
+Follow these principles in all code:
+
+- Modularity: small parts with clean interfaces.
+- Clarity: clarity beats cleverness.
+- Composition: design to connect with other programs.
+- Separation: policy vs mechanism; interfaces vs engines.
+- Simplicity: add complexity only when required.
+- Parsimony: write big programs only when necessary.
+- Transparency: make inspection and debugging easy.
+- Robustness: transparency + simplicity produce robustness.
+- Representation: put knowledge in data, keep logic simple.
+- Least Surprise: do the least surprising thing.
+- Silence: say nothing when nothing is surprising.
+- Repair: fail loudly and early when failure is required.
+- Economy: save programmer time over machine time.
+- Generation: automate instead of hand-hacking.
+- Optimization: prototype first, optimize later.
+- Diversity: avoid "one true way".
+- Extensibility: design for future change.
+
+## Examples
+
+```python
+# BAD: hidden side effects, surprising behavior
+def send_report(user, report):
+    print("sending report")  # noisy in normal success path
+    return smtp.send(user.email, report)
+
+# GOOD: quiet success, loud failure, clear intent
+def send_report(user, report):
+    if not user.email:
+        raise ValueError("user.email is required")
+    smtp.send(user.email, report)
+```
+
+```python
+# BAD: policy mixed with mechanism
+def save_user(user):
+    db.insert("users", user.to_dict())
+    audit.log("users", user.id)
+    if user.plan == "pro":
+        notifier.send(user.email, "welcome")
+
+# GOOD: policy separated from mechanism
+def save_user(user):
+    persist_user(user)
+    run_user_policies(user)
+```
