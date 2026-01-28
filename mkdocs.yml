@@ -1,0 +1,94 @@
+site_name: Evaluateur
+site_url: https://evaluateur.aptford.com
+site_description: Synthetic evaluation helper for LLM applications
+site_author: Sasha Aptlin
+repo_name: aptford/evaluateur
+repo_url: https://github.com/aptford/evaluateur
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: numpy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts:
+      - Dimensions, Tuples, Queries: concepts/dimensions-tuples-queries.md
+      - Goal-Guided Optimization: concepts/goal-guided-optimization.md
+  - Guides:
+      - Basic Usage: guides/basic-usage.md
+      - Custom Goals: guides/custom-goals.md
+      - Context Builders: guides/context-builders.md
+      - Provider Configuration: guides/provider-configuration.md
+  - API Reference:
+      - Evaluator: api/evaluator.md
+      - LLMClient: api/client.md
+      - Goals: api/goals.md
+      - Queries: api/queries.md
+      - Tuples: api/tuples.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aptford/evaluateur
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/evaluateur/
