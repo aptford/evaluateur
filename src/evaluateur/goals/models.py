@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from evaluateur.client import LLMClient
-from evaluateur.goal_parsing import build_goal_spec_messages
-from evaluateur.goal_rendering import render_focused_goal_prompt, render_goal_prompt
+from evaluateur.goals.parsing import build_goal_spec_messages
+from evaluateur.goals.rendering import render_focused_goal_prompt, render_goal_prompt
 
+if TYPE_CHECKING:
+    from evaluateur.generators.query.protocols import ContextBuilder
+    from evaluateur.models import QueryMetadata
 
 GoalFocusArea = Literal["components", "trajectories", "outcomes"]
 GoalMode = Literal["full", "sample"]
@@ -74,6 +78,24 @@ class GoalLayer(BaseModel):
     )
     items: list[GoalItem] = Field(default_factory=list)
 
+    def weight(self) -> float:
+        """Return the effective weight for this layer."""
+        if self.items:
+            total = math.fsum(
+                float(it.weight) for it in self.items if float(it.weight) > 0.0
+            )
+            if total > 0.0:
+                return total
+        if isinstance(self.summary, str) and self.summary.strip():
+            return 1.0
+        return 0.0
+
+    def has_content(self) -> bool:
+        """Return True if the layer has any active goals or summary text."""
+        if isinstance(self.summary, str) and self.summary.strip():
+            return True
+        return any(it.weight > 0 for it in self.items)
+
 
 class GoalSpec(BaseModel):
     """User-provided guidance for shaping evaluation queries."""
@@ -125,19 +147,22 @@ class GoalSpec(BaseModel):
     def available_focus_areas(self) -> list[GoalFocusArea]:
         """Return the goal layers that are non-empty (considering weights)."""
 
-        def _has_any(layer: GoalLayer) -> bool:
-            if layer.summary and layer.summary.strip():
-                return True
-            return any(it.weight > 0 for it in layer.items)
-
         areas: list[GoalFocusArea] = []
-        if _has_any(self.components):
+        if self.components.has_content():
             areas.append("components")
-        if _has_any(self.trajectories):
+        if self.trajectories.has_content():
             areas.append("trajectories")
-        if _has_any(self.outcomes):
+        if self.outcomes.has_content():
             areas.append("outcomes")
         return areas
+
+    def focus_weight(self, focus_area: GoalFocusArea) -> float:
+        """Return the effective weight for a focus area."""
+        if focus_area == "components":
+            return self.components.weight()
+        if focus_area == "trajectories":
+            return self.trajectories.weight()
+        return self.outcomes.weight()
 
     def render_focused_prompt(self, *, focus_area: GoalFocusArea) -> str:
         """Render only a single goal layer (components/trajectories/outcomes)."""
@@ -147,3 +172,21 @@ class GoalSpec(BaseModel):
         """Return a JSON-serializable metadata representation."""
 
         return self.model_dump(exclude_none=True)
+
+
+@dataclass(frozen=True)
+class GoalGuidancePlan:
+    """Resolved goal guidance for a query-generation run."""
+
+    goal_spec: GoalSpec | None
+    run_metadata: QueryMetadata
+    context: str
+    context_builder: ContextBuilder | None
+
+
+@dataclass(frozen=True)
+class GoalFocusPlan:
+    """Prepared focus areas and weights for sampling."""
+
+    choices: list[GoalFocusArea]
+    weights: list[float]

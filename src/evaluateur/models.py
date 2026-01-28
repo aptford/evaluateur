@@ -4,7 +4,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from evaluateur.goals import GoalFocusArea, GoalMode, GoalSpec
+from evaluateur.goals.models import GoalFocusArea, GoalMode, GoalSpec
 from evaluateur.types import ScalarValue
 
 

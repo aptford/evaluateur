@@ -4,7 +4,7 @@ import textwrap
 from typing import TYPE_CHECKING, Iterable
 
 if TYPE_CHECKING:
-    from evaluateur.goals import GoalFocusArea, GoalItem, GoalLayer, GoalSpec
+    from evaluateur.goals.models import GoalFocusArea, GoalItem, GoalLayer, GoalSpec
 
 
 _FOCUS_LABELS: dict[str, str] = {

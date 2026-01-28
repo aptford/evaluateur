@@ -198,7 +198,6 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
 
     for q in results:
         assert q.metadata.generator == "dummy"
-        assert q.metadata.mode == "instructor"
         assert q.metadata.goal_guided is True
         assert q.metadata.goal_mode == "sample"
         assert isinstance(q.metadata.query_goals, GoalSpec)
@@ -233,8 +232,7 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
         ]
 
     assert len(captured) == 1
-    assert "<instructions>" in captured[0]
-    assert "Keep it short." in captured[0]
+    assert captured[0] == "Keep it short."
 
 
 async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> None:

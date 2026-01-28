@@ -9,11 +9,10 @@ from pydantic import BaseModel
 from evaluateur.client import LLMClient
 from evaluateur.factories import build_query_generator, build_tuple_generator
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
-from evaluateur.goals import GoalSpec
-from evaluateur.goals import GoalMode
+from evaluateur.goals.models import GoalMode, GoalSpec
 from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
 from evaluateur._internal.async_iter import to_async_iterator
-from evaluateur.goal_guidance import plan_goal_guidance
+from evaluateur.goals.planning import plan_goal_guidance
 
 log = logging.getLogger(__name__)
 

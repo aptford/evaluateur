@@ -1,14 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict
-
-
-class _Message(TypedDict):
-    role: str
-    content: str
-
-
-_SYSTEM_PROMPT = (
+SYSTEM_PROMPT = (
     "You are a test designer. Convert free-form product/domain guidance into a structured "
     "GoalSpec that will be used to GENERATE synthetic evaluation user queries.\n\n"
     "Your output is consumed by a query generator. Write goals as measurable constraints "
@@ -77,7 +69,7 @@ _SYSTEM_PROMPT = (
     "- Do not add new requirements unrelated to the provided guidance.\n"
 )
 
-_USER_PROMPT_PREFIX = (
+USER_PROMPT_PREFIX = (
     "Create a GoalSpec from the guidance below.\n\n"
     "Interpret the guidance as describing:\n"
     "- who the users are\n"
@@ -94,14 +86,3 @@ _USER_PROMPT_PREFIX = (
     "- Keep must_include/avoid empty unless a literal checklist token is essential.\n\n"
     "Guidance:\n"
 )
-
-
-def build_goal_spec_messages(text: str) -> list[_Message]:
-    """Build instructor messages for parsing free-form goal guidance."""
-    cleaned = text.strip()
-    if not cleaned:
-        return []
-    return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": f"{_USER_PROMPT_PREFIX}```{cleaned}```"},
-    ]

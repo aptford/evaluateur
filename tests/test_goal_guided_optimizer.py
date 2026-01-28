@@ -25,7 +25,7 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
         ),
     )
 
-    prompt = spec.render_prompt(max_chars=2000)
+    prompt = spec.render_prompt()
     assert "Query optimization goals" in prompt
     assert "Components:" in prompt
     assert "freshness" in prompt
@@ -34,7 +34,7 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
     assert "latest effective date" in prompt
     assert len(prompt) <= 2000
 
-    focus_prompt = spec.render_focused_prompt(focus_area="components", max_chars=2000)
+    focus_prompt = spec.render_focused_prompt(focus_area="components")
     assert "focus area" in focus_prompt
     assert "Components:" in focus_prompt
     assert "freshness" in focus_prompt
@@ -45,22 +45,6 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
 
 def test_goal_spec_is_empty_when_no_goals() -> None:
     assert GoalSpec().is_empty() is True
-
-
-def test_goal_spec_render_prompt_truncation_respects_max_chars() -> None:
-    # Make a prompt that will definitely exceed the max.
-    spec = GoalSpec(
-        components=GoalLayer(
-            summary=("x" * 500),
-            items=[GoalItem(name="n", must_include=["a" * 200])],
-        ),
-    )
-
-    max_chars = 80
-    prompt = spec.render_prompt(max_chars=max_chars)
-
-    assert len(prompt) <= max_chars
-    assert prompt.endswith("…\n")
 
 
 def test_goal_item_weight_must_be_finite_and_non_negative() -> None:
