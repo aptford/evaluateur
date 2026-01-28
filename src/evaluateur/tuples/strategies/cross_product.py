@@ -10,7 +10,8 @@ from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
 from evaluateur.queries.models import GeneratedTuple
-from evaluateur.tuples.options_adapter import extract_dimension_values
+
+from ..options_adapter import extract_dimension_values
 
 log = logging.getLogger(__name__)
 

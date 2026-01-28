@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from evaluateur.client import LLMClient
-from evaluateur.tuples.cross_product import CrossProductTupleGenerator
-from evaluateur.tuples.direct_llm import DirectLLMTupleGenerator
 from evaluateur.tuples.protocols import TupleGenerator
-from evaluateur.tuples.strategy import TupleStrategy
+from evaluateur.tuples.strategies import (
+    CrossProductTupleGenerator,
+    DirectLLMTupleGenerator,
+    TupleStrategy,
+)
 
 
 def build_tuple_generator(
