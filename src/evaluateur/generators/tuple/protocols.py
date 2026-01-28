@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 from pydantic import BaseModel
 
 from evaluateur.models import GeneratedTuple
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
 
-
-class TupleGenerator(Protocol[ModelT]):
+class TupleGenerator(Protocol):
     """Protocol for async tuple generators that yield tuples one at a time."""
 
     def generate(
@@ -20,6 +18,6 @@ class TupleGenerator(Protocol[ModelT]):
         *,
         seed: int = 0,
         instructions: str | None = None,
-    ) -> AsyncIterator[GeneratedTuple[ModelT]]:
+    ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples asynchronously, yielding one at a time."""
 

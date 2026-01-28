@@ -81,6 +81,8 @@ Evaluateur accepts instructions at each stage:
 - **Query generation**: use `Evaluator.queries(instructions=...)` to guide how the
   _natural language query_ should be written (e.g. "Keep the question short
   and specific.").
+- **Query mode**: use `Evaluator.queries(query_mode=...)` or `Evaluator.run(query_mode=...)`
+  to select a query generator mode (currently `QueryMode.INSTRUCTOR`).
 
 `Evaluator.run(instructions=...)` shares the same instruction string across all
 three stages.
@@ -191,6 +193,19 @@ class MyQueryGenerator:
 
             # Use effective_context to build your prompt, and attach meta if you want.
             yield GeneratedQuery(query=f"ctx={effective_context}", source_tuple=t, metadata=meta)
+```
+
+## Generator factories (advanced)
+
+If you want direct access to the built-in generators, use the public factories:
+
+```python
+from evaluateur import LLMClient, build_query_generator, build_tuple_generator
+from evaluateur import QueryMode, TupleStrategy
+
+client = LLMClient.from_env()
+tuple_gen = build_tuple_generator(client=client, strategy=TupleStrategy.CROSS_PRODUCT)
+query_gen = build_query_generator(client=client, mode=QueryMode.INSTRUCTOR)
 ```
 
 Structured goals:

@@ -1,27 +1,19 @@
 from __future__ import annotations
 
 import logging
-import random
 from collections.abc import AsyncIterator, Sequence
 from typing import Type, TypeVar
 
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
+from evaluateur.factories import build_query_generator, build_tuple_generator
 from evaluateur.generators import OptionsGenerator, QueryMode, TupleStrategy
-from evaluateur.generators.query.context import compose_query_context
-from evaluateur.goals import GoalFocusArea, GoalSpec
+from evaluateur.goals import GoalSpec
 from evaluateur.goals import GoalMode
 from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
 from evaluateur._internal.async_iter import to_async_iterator
-from evaluateur._internal.evaluator_factories import (
-    build_query_generator,
-    build_tuple_generator,
-)
-from evaluateur._internal.evaluator_goal_guidance import (
-    GoalSamplingContextBuilder,
-    normalize_goal_spec,
-)
+from evaluateur.goal_guidance import plan_goal_guidance
 
 log = logging.getLogger(__name__)
 
@@ -124,69 +116,52 @@ class Evaluator:
         tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
         instructions: str | None = None,
         goal_mode: GoalMode = "sample",
+        query_mode: QueryMode = QueryMode.INSTRUCTOR,
         seed: int = 0,
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
+        """Generate natural language queries from tuples.
+
+        Parameters
+        ----------
+        tuples
+            Sequence or async stream of tuples to turn into queries.
+        instructions
+            Optional instructions for query generation.
+        goal_mode
+            Goal guidance mode ("sample" or "full").
+        query_mode
+            Query generator mode.
+        seed
+            Random seed for goal sampling.
+        goals
+            Goal specification for guided query generation.
+        """
         log.info(
             "Generating queries: tuple_count=%s",
             "streaming" if hasattr(tuples, "__aiter__") else len(tuples),  # type: ignore[arg-type]
         )
 
-        query_gen = build_query_generator(client=self.client)
-
-        goal_spec = await normalize_goal_spec(self.client, goals)
-        focus_areas: list[GoalFocusArea] = (
-            goal_spec.available_focus_areas() if goal_spec is not None else []
-        )
-        goal_guided = bool(focus_areas)
-
-        run_metadata = QueryMetadata(
-            goal_guided=goal_guided,
+        guidance = await plan_goal_guidance(
+            client=self.client,
+            goals=goals,
             goal_mode=goal_mode,
-            query_goals=(
-                goal_spec
-                if goal_spec is not None and not goal_spec.is_empty()
-                else None
-            ),
+            instructions=instructions,
+            seed=seed,
         )
 
-        q: GeneratedQuery
-        if goal_mode == "sample" and goal_spec is not None and focus_areas:
-            rng = random.Random(seed)
-            context_builder = GoalSamplingContextBuilder(
-                base_context=instructions,
-                goal_spec=goal_spec,
-                focus_areas=focus_areas,
-                rng=rng,
-            )
+        query_gen = build_query_generator(client=self.client, mode=query_mode)
 
-            async for q in query_gen.generate(
-                to_async_iterator(tuples),
-                instructions,
-                context_builder=context_builder,
-            ):
-                yield GeneratedQuery(
-                    query=q.query,
-                    source_tuple=q.source_tuple,
-                    metadata=QueryMetadata.merge(
-                        run_metadata=run_metadata,
-                        per_query_metadata=q.metadata,
-                    ),
-                )
-            return
-
-        goal_prompt: str | None = None
-        if goal_mode == "full" and goal_spec is not None:
-            goal_prompt = goal_spec.render_prompt()
-
-        effective_context = compose_query_context(instructions, goal_prompt=goal_prompt)
-
-        async for q in query_gen.generate(to_async_iterator(tuples), effective_context):
+        async for q in query_gen.generate(
+            to_async_iterator(tuples),
+            guidance.context,
+            context_builder=guidance.context_builder,
+        ):
             yield GeneratedQuery(
                 query=q.query,
                 source_tuple=q.source_tuple,
                 metadata=QueryMetadata.merge(
-                    run_metadata=run_metadata,
+                    run_metadata=guidance.run_metadata,
                     per_query_metadata=q.metadata,
                 ),
             )
@@ -201,6 +176,7 @@ class Evaluator:
         tuple_count: int = 20,
         seed: int = 0,
         goal_mode: GoalMode = "sample",
+        query_mode: QueryMode = QueryMode.INSTRUCTOR,
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         """Convenience wrapper: options → tuples → queries (streaming).
@@ -222,6 +198,8 @@ class Evaluator:
             Random seed for tuple sampling and goal sampling.
         goal_mode
             Goal guidance mode ("sample" or "full").
+        query_mode
+            Query generator mode.
         goals
             Goal specification for guided query generation.
         """
@@ -240,9 +218,9 @@ class Evaluator:
         )
         async for q in self.queries(
             tuples=tuple_iter,
-            mode=QueryMode.INSTRUCTOR,
             instructions=instructions,
             goal_mode=goal_mode,
+            query_mode=query_mode,
             seed=seed,
             goals=goals,
         ):
