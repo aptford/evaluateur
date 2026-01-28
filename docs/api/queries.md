@@ -107,8 +107,6 @@ Metadata associated with a generated query.
 ::: evaluateur.queries.QueryMetadata
     options:
       show_source: true
-      members:
-        - merge
 
 ### Constructor
 
@@ -150,23 +148,23 @@ print(meta.goal_focus_area)  # "components"
 print(meta.model_dump())  # Includes custom_field
 ```
 
-### Methods
+---
 
-#### `merge()`
+## merge_query_metadata()
 
-Combine run-level and per-query metadata.
+Standalone function for merging query metadata.
 
 ```python
-@classmethod
-def merge(
-    cls,
-    *,
-    run_metadata: QueryMetadata,
-    per_query_metadata: QueryMetadata,
-) -> QueryMetadata
+from evaluateur.queries import merge_query_metadata
+
+merged = merge_query_metadata(
+    run_metadata=run_meta,
+    per_query_metadata=query_meta,
+)
 ```
 
-Per-query metadata wins on conflicts.
+This function implements the merge policy: run metadata provides defaults,
+and per-query metadata wins on conflicts.
 
 ---
 

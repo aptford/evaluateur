@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any, Callable, Type
 
 from pydantic import BaseModel, Field, create_model
 
 from evaluateur.client import LLMClient
 from evaluateur.options.types import ModelT, create_options_model, is_iterator_field
+from evaluateur.prompts.options import format_options_prompts
 
 
 class OptionsGenerator:
@@ -52,36 +53,33 @@ class OptionsGenerator:
         *,
         instructions: str | None = None,
         count_per_field: int = 5,
+        prompt_formatter: Callable[
+            [type[BaseModel], int, str | None], tuple[str, str]
+        ] = format_options_prompts,
     ) -> BaseModel:
         """Generate an options model instance for the given query model.
 
         Simple scalar fields (e.g. ``str``) are converted to lists of values.
         Fields that are already iterables (lists, tuples, etc.) are preserved
         with their existing types.
+
+        Parameters
+        ----------
+        model
+            The Pydantic model defining the query dimensions.
+        instructions
+            Optional additional instructions for the LLM.
+        count_per_field
+            Number of options to generate per field.
+        prompt_formatter
+            Callable that formats the prompts. Defaults to the standard formatter.
+            This allows customizing prompts without changing mechanism code.
         """
         options_model = create_options_model(model)
         response_model = self._build_response_model(model, options_model)
 
-        system_instructions = (
-            "You are generating diverse, realistic options for each dimension of a synthetic "
-            "evaluation schema. For each field, produce a list of concise labels that cover both "
-            "common and edge-case values."
-        )
-        if instructions:
-            system_instructions += " Additional instructions:\n"
-            system_instructions += f"<instructions>\n{instructions}\n</instructions>\n"
-
-        # Build a text description of the dimensions for the user message.
-        dimension_descriptions: list[str] = []
-        for name, field in model.model_fields.items():
-            field_desc = field.description or ""
-            field_type = str(field.annotation)
-            dimension_descriptions.append(f"- {name} ({field_type}): {field_desc}")
-
-        user_message = (
-            "Given the following dimensions, generate options for each field. "
-            f"Provide around {count_per_field} distinct, high-quality options per field.\n\n"
-            + "\n".join(dimension_descriptions)
+        system_message, user_message = prompt_formatter(
+            model, count_per_field, instructions
         )
 
         client = self._client.instructor_client
@@ -90,7 +88,7 @@ class OptionsGenerator:
             model=self._client.model_name,
             response_model=response_model,
             messages=[
-                {"role": "system", "content": system_instructions},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},
             ],
         )

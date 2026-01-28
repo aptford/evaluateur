@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from typing import Callable
 
 from pydantic import BaseModel, create_model
 
 from evaluateur.client import LLMClient
 from evaluateur.options.types import ScalarValue
+from evaluateur.prompts.tuples import format_tuples_prompts
 from evaluateur.queries.models import GeneratedTuple
 
 from ..options_adapter import extract_dimension_values
@@ -41,7 +43,26 @@ class DirectLLMTupleGenerator:
         *,
         seed: int = 0,
         instructions: str | None = None,
+        prompt_formatter: Callable[
+            [list[str], list[list[object]], int, str | None], tuple[str, str]
+        ] = format_tuples_prompts,
     ) -> AsyncIterator[GeneratedTuple]:
+        """Generate tuples using the LLM.
+
+        Parameters
+        ----------
+        options
+            The options model containing dimension values.
+        count
+            Number of tuples to generate.
+        seed
+            Random seed (accepted for API consistency, not currently used).
+        instructions
+            Optional additional instructions for the LLM.
+        prompt_formatter
+            Callable that formats the prompts. Defaults to the standard formatter.
+            This allows customizing prompts without changing mechanism code.
+        """
         # Note: `seed` is accepted for API consistency with other tuple generators,
         # but is not currently used because the LLM backend is non-deterministic.
         _ = seed
@@ -50,24 +71,8 @@ class DirectLLMTupleGenerator:
 
         field_names, value_lists = extract_dimension_values(options)
 
-        option_lines: list[str] = []
-        for name, values in zip(field_names, value_lists):
-            display = ", ".join(map(str, values))
-            option_lines.append(f"- {name}: {display}")
-
-        system_message = (
-            "You are generating structured synthetic test cases for an evaluation suite. "
-            "Each test case is a tuple that selects exactly one value for every dimension."
-        )
-        if instructions:
-            system_message += (
-                "\nAdditional instructions:\n"
-                f"<instructions>\n{instructions}\n</instructions>\n"
-            )
-        user_message = (
-            "Using the following options per dimension, generate diverse tuples. "
-            f"Return around {count} combinations, preferring realistic and high-value cases.\n\n"
-            + "\n".join(option_lines)
+        system_message, user_message = prompt_formatter(
+            field_names, value_lists, count, instructions
         )
         log.debug("DirectLLMTupleGenerator prompt:\n%s", user_message)
 

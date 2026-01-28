@@ -1,3 +1,9 @@
+"""Goal specification models.
+
+This module contains the data models for goal specifications.
+Parsing logic is in the parsing module; rendering logic is in the rendering module.
+"""
+
 from __future__ import annotations
 
 import math
@@ -6,13 +12,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from evaluateur.client import LLMClient
-from evaluateur.goals.parsing import build_goal_spec_messages
 from evaluateur.goals.rendering import render_focused_goal_prompt, render_goal_prompt
 
 if TYPE_CHECKING:
-    from evaluateur.queries.protocols import ContextBuilder
     from evaluateur.queries.models import QueryMetadata
+    from evaluateur.queries.protocols import ContextBuilder
 
 GoalFocusArea = Literal["components", "trajectories", "outcomes"]
 GoalMode = Literal["full", "sample"]
@@ -103,28 +107,6 @@ class GoalSpec(BaseModel):
     components: GoalLayer = Field(default_factory=GoalLayer)
     trajectories: GoalLayer = Field(default_factory=GoalLayer)
     outcomes: GoalLayer = Field(default_factory=GoalLayer)
-
-    @classmethod
-    async def from_text(cls, client: LLMClient, text: str) -> GoalSpec:
-        """Parse free-form user text into a structured `GoalSpec`.
-
-        This uses Instructor + Pydantic parsing, so callers get a stable schema.
-        """
-
-        cleaned = text.strip()
-        if not cleaned:
-            return cls()
-        messages = build_goal_spec_messages(cleaned)
-        if not messages:
-            return cls()
-
-        inst = client.instructor_client
-        parsed: GoalSpec = await inst.chat.completions.create(
-            model=client.model_name,
-            response_model=cls,
-            messages=messages,
-        )
-        return parsed
 
     def is_empty(self) -> bool:
         """Return True if no goals are specified."""

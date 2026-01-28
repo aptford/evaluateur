@@ -33,7 +33,7 @@ evaluator = Evaluator(Query)
 
 ## Constructor
 
-### `__init__(model, *, client=None)`
+### `__init__(model, *, client=None, config=None)`
 
 Create an evaluator for the given dimension model.
 
@@ -43,19 +43,61 @@ Create an evaluator for the given dimension model.
 |------|------|-------------|
 | `model` | `Type[BaseModel]` | Pydantic model defining evaluation dimensions |
 | `client` | `LLMClient | None` | LLM client to use. If `None`, creates one via `LLMClient.from_env()` |
+| `config` | `EvaluatorConfig | None` | Configuration for default values. If `None`, uses `DEFAULT_CONFIG` |
 
 **Example:**
 
 ```python
-from evaluateur import Evaluator, LLMClient
+from evaluateur import Evaluator, LLMClient, EvaluatorConfig
 
-# Default client
+# Default client and config
 evaluator = Evaluator(Query)
 
 # Custom client
 client = LLMClient.from_env(model_name="gpt-4o")
 evaluator = Evaluator(Query, client=client)
+
+# Custom config with different defaults
+config = EvaluatorConfig(
+    tuples_count=50,
+    options_count_per_field=10,
+    goal_mode="full",
+)
+evaluator = Evaluator(Query, config=config)
 ```
+
+## EvaluatorConfig
+
+Configuration class for setting default parameter values.
+
+```python
+from evaluateur import EvaluatorConfig, DEFAULT_CONFIG
+
+# View default values
+print(DEFAULT_CONFIG.tuples_count)  # 20
+print(DEFAULT_CONFIG.options_count_per_field)  # 5
+
+# Create custom config
+config = EvaluatorConfig(
+    options_count_per_field=10,
+    tuples_count=50,
+    tuples_seed=42,
+    tuples_strategy="cross_product",
+    goal_mode="sample",
+    query_mode="instructor",
+)
+```
+
+**Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `options_count_per_field` | `int` | `5` | Default options per field |
+| `tuples_count` | `int` | `20` | Default number of tuples |
+| `tuples_seed` | `int` | `0` | Default random seed |
+| `tuples_strategy` | `str` | `"cross_product"` | Default tuple strategy |
+| `goal_mode` | `str` | `"sample"` | Default goal mode |
+| `query_mode` | `str` | `"instructor"` | Default query mode |
 
 ## Methods
 
@@ -68,7 +110,7 @@ async def options(
     self,
     *,
     instructions: str | None = None,
-    count_per_field: int = 5,
+    count_per_field: int | None = None,
 ) -> BaseModel
 ```
 
@@ -77,7 +119,7 @@ async def options(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `instructions` | `str | None` | `None` | Instructions for option generation |
-| `count_per_field` | `int` | `5` | Number of options per scalar field |
+| `count_per_field` | `int | None` | config | Number of options per scalar field (defaults to config value) |
 
 **Returns:** A dynamically created Pydantic model instance where each scalar field is converted to a list of options.
 
@@ -108,9 +150,9 @@ async def tuples(
     self,
     options: BaseModel,
     *,
-    strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT,
-    count: int = 20,
-    seed: int = 0,
+    strategy: TupleStrategy | None = None,
+    count: int | None = None,
+    seed: int | None = None,
     instructions: str | None = None,
 ) -> AsyncIterator[GeneratedTuple]
 ```
@@ -120,9 +162,9 @@ async def tuples(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `options` | `BaseModel` | - | Options model from `options()` |
-| `strategy` | `TupleStrategy` | `CROSS_PRODUCT` | Tuple generation strategy |
-| `count` | `int` | `20` | Number of tuples to generate |
-| `seed` | `int` | `0` | Random seed for sampling |
+| `strategy` | `TupleStrategy | None` | config | Tuple generation strategy (defaults to config) |
+| `count` | `int | None` | config | Number of tuples to generate (defaults to config) |
+| `seed` | `int | None` | config | Random seed for sampling (defaults to config) |
 | `instructions` | `str | None` | `None` | Instructions for LLM-based strategies |
 
 **Yields:** `GeneratedTuple` objects containing dimension value combinations.
@@ -151,9 +193,9 @@ async def queries(
     *,
     tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
     instructions: str | None = None,
-    goal_mode: GoalMode = "sample",
-    query_mode: QueryMode = QueryMode.INSTRUCTOR,
-    seed: int = 0,
+    goal_mode: GoalMode | None = None,
+    query_mode: QueryMode | None = None,
+    seed: int | None = None,
     goals: GoalSpec | str | None = None,
 ) -> AsyncIterator[GeneratedQuery]
 ```
@@ -164,9 +206,9 @@ async def queries(
 |------|------|---------|-------------|
 | `tuples` | `Sequence | AsyncIterator` | - | Tuples to convert to queries |
 | `instructions` | `str | None` | `None` | Query generation instructions |
-| `goal_mode` | `GoalMode` | `"sample"` | Goal guidance mode |
-| `query_mode` | `QueryMode` | `INSTRUCTOR` | Query generator to use |
-| `seed` | `int` | `0` | Seed for goal sampling |
+| `goal_mode` | `GoalMode | None` | config | Goal guidance mode (defaults to config) |
+| `query_mode` | `QueryMode | None` | config | Query generator to use (defaults to config) |
+| `seed` | `int | None` | config | Seed for goal sampling (defaults to config) |
 | `goals` | `GoalSpec | str | None` | `None` | Goal specification |
 
 **Yields:** `GeneratedQuery` objects with the query text and metadata.
@@ -196,12 +238,12 @@ async def run(
     *,
     options: BaseModel | None = None,
     instructions: str | None = None,
-    count_per_field: int = 5,
-    tuple_strategy: TupleStrategy = TupleStrategy.CROSS_PRODUCT,
-    tuple_count: int = 20,
-    seed: int = 0,
-    goal_mode: GoalMode = "sample",
-    query_mode: QueryMode = QueryMode.INSTRUCTOR,
+    count_per_field: int | None = None,
+    tuple_strategy: TupleStrategy | None = None,
+    tuple_count: int | None = None,
+    seed: int | None = None,
+    goal_mode: GoalMode | None = None,
+    query_mode: QueryMode | None = None,
     goals: GoalSpec | str | None = None,
 ) -> AsyncIterator[GeneratedQuery]
 ```
@@ -212,12 +254,12 @@ async def run(
 |------|------|---------|-------------|
 | `options` | `BaseModel | None` | `None` | Pre-generated options (skips generation if provided) |
 | `instructions` | `str | None` | `None` | Shared instructions for all stages |
-| `count_per_field` | `int` | `5` | Options per field |
-| `tuple_strategy` | `TupleStrategy` | `CROSS_PRODUCT` | Tuple generation strategy |
-| `tuple_count` | `int` | `20` | Number of tuples |
-| `seed` | `int` | `0` | Random seed |
-| `goal_mode` | `GoalMode` | `"sample"` | Goal guidance mode |
-| `query_mode` | `QueryMode` | `INSTRUCTOR` | Query generator |
+| `count_per_field` | `int | None` | config | Options per field (defaults to config) |
+| `tuple_strategy` | `TupleStrategy | None` | config | Tuple generation strategy (defaults to config) |
+| `tuple_count` | `int | None` | config | Number of tuples (defaults to config) |
+| `seed` | `int | None` | config | Random seed (defaults to config) |
+| `goal_mode` | `GoalMode | None` | config | Goal guidance mode (defaults to config) |
+| `query_mode` | `QueryMode | None` | config | Query generator (defaults to config) |
 | `goals` | `GoalSpec | str | None` | `None` | Goal specification |
 
 **Yields:** `GeneratedQuery` objects.
@@ -240,6 +282,7 @@ async for q in evaluator.run(
 |-----------|------|-------------|
 | `model` | `Type[BaseModel]` | The dimension model |
 | `client` | `LLMClient` | The LLM client |
+| `config` | `EvaluatorConfig` | Configuration with default values |
 
 ## See Also
 

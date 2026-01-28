@@ -28,7 +28,6 @@ Top-level container for goal guidance.
     options:
       show_source: true
       members:
-        - from_text
         - is_empty
         - render_prompt
         - available_focus_areas
@@ -56,27 +55,6 @@ GoalSpec(
 
 ### Methods
 
-#### `from_text()`
-
-Parse free-form text into a structured `GoalSpec`.
-
-```python
-@classmethod
-async def from_text(cls, client: LLMClient, text: str) -> GoalSpec
-```
-
-**Example:**
-
-```python
-from evaluateur import LLMClient, GoalSpec
-
-client = LLMClient.from_env()
-spec = await GoalSpec.from_text(
-    client,
-    "Test freshness and citation accuracy. Include error recovery.",
-)
-```
-
 #### `is_empty()`
 
 Check if no goals are specified.
@@ -101,6 +79,25 @@ Get the effective weight for a focus area.
 ```python
 def focus_weight(self, focus_area: GoalFocusArea) -> float
 ```
+
+---
+
+## parse_goal_spec()
+
+Parse free-form text into a structured `GoalSpec`.
+
+```python
+from evaluateur import LLMClient, parse_goal_spec
+
+client = LLMClient.from_env()
+spec = await parse_goal_spec(
+    client,
+    "Test freshness and citation accuracy. Include error recovery.",
+)
+```
+
+This function uses Instructor + Pydantic parsing to extract a stable schema
+from free-form text. It returns an empty `GoalSpec` if the text is empty.
 
 ---
 
