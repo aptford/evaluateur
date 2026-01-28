@@ -17,7 +17,7 @@ from evaluateur.queries import (
 )
 from evaluateur.tuples import TupleStrategy, build_tuple_generator
 from evaluateur.goals.models import GoalMode, GoalSpec
-from evaluateur.queries._internal.async_iter import to_async_iterator
+from evaluateur.utils import to_async_iterator
 from evaluateur.goals.planning import plan_goal_guidance
 
 log = logging.getLogger(__name__)
