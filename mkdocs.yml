@@ -37,6 +37,9 @@ theme:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      include_source: true
+      execute: false
   - mkdocstrings:
       handlers:
         python:
@@ -76,6 +79,7 @@ nav:
       - Goal-Guided Optimization: concepts/goal-guided-optimization.md
   - Guides:
       - Basic Usage: guides/basic-usage.md
+      - Walkthrough Notebook: guides/walkthrough.ipynb
       - Custom Goals: guides/custom-goals.md
       - Context Builders: guides/context-builders.md
       - Provider Configuration: guides/provider-configuration.md
