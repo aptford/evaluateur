@@ -25,7 +25,7 @@ def _build_flat_tuple_model(field_names: list[str]) -> type[BaseModel]:
     )
 
 
-class DirectLLMTupleGenerator:
+class AITupleGenerator:
     """Generate tuples directly with Instructor as an async iterator.
 
     This uses the LLM to propose realistic combinations instead of enumerating
@@ -67,14 +67,14 @@ class DirectLLMTupleGenerator:
         # but is not currently used because the LLM backend is non-deterministic.
         _ = seed
         client = self._client.instructor_client
-        log.info("DirectLLMTupleGenerator: requesting ~%d tuples from LLM", count)
+        log.info("AITupleGenerator: requesting ~%d tuples from LLM", count)
 
         field_names, value_lists = extract_dimension_values(options)
 
         system_message, user_message = prompt_formatter(
             field_names, value_lists, count, instructions
         )
-        log.debug("DirectLLMTupleGenerator prompt:\n%s", user_message)
+        log.debug("AITupleGenerator prompt:\n%s", user_message)
 
         FlatTuple = _build_flat_tuple_model(field_names)
 
@@ -89,7 +89,7 @@ class DirectLLMTupleGenerator:
                 {"role": "user", "content": user_message},
             ],
         )
-        log.debug("DirectLLMTupleGenerator: received %d tuples", len(result.tuples))
+        log.debug("AITupleGenerator: received %d tuples", len(result.tuples))
 
         for t in result.tuples:
             yield GeneratedTuple(values=t.model_dump())

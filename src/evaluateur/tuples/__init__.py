@@ -4,13 +4,13 @@ from .factories import build_tuple_generator
 from .protocols import TupleGenerator
 from .strategies import (
     CrossProductTupleGenerator,
-    DirectLLMTupleGenerator,
+    AITupleGenerator,
     TupleStrategy,
 )
 
 __all__ = [
+    "AITupleGenerator",
     "CrossProductTupleGenerator",
-    "DirectLLMTupleGenerator",
     "TupleGenerator",
     "TupleStrategy",
     "build_tuple_generator",

@@ -76,14 +76,14 @@ async for t in evaluator.tuples(
 
 When `count` is less than total combinations, Evaluateur uses Farthest Point Sampling (FPS) to select a maximally diverse subset. Each selected tuple differs from all previously selected tuples on as many dimensions as possible, ensuring broad coverage of the evaluation space.
 
-#### Direct LLM
+#### AI
 
 Asks the LLM to generate tuples directly, which can produce more coherent combinations:
 
 ```python
 async for t in evaluator.tuples(
     options,
-    strategy=TupleStrategy.DIRECT_LLM,
+    strategy=TupleStrategy.AI,
     count=50,
     instructions="Generate realistic patient scenarios",
 ):
@@ -162,7 +162,7 @@ options = await evaluator.options(
     count_per_field=10,
 )
 
-# Guide tuple selection (for DIRECT_LLM strategy)
+# Guide tuple selection (for AI strategy)
 tuples = evaluator.tuples(
     options,
     instructions="Prefer combinations that stress-test the system",

@@ -4,7 +4,7 @@ from evaluateur.client import LLMClient
 from evaluateur.tuples.protocols import TupleGenerator
 from evaluateur.tuples.strategies import (
     CrossProductTupleGenerator,
-    DirectLLMTupleGenerator,
+    AITupleGenerator,
     TupleStrategy,
 )
 
@@ -19,9 +19,9 @@ def build_tuple_generator(
     if strategy == TupleStrategy.CROSS_PRODUCT:
         return CrossProductTupleGenerator(client=client)
 
-    if strategy == TupleStrategy.DIRECT_LLM:
+    if strategy == TupleStrategy.AI:
         if client is None:
-            raise ValueError("DIRECT_LLM tuple strategy requires an LLMClient")
-        return DirectLLMTupleGenerator(client=client)
+            raise ValueError("AI tuple strategy requires an LLMClient")
+        return AITupleGenerator(client=client)
 
     raise ValueError(f"Unsupported tuple strategy: {strategy}")

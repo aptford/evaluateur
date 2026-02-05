@@ -19,13 +19,13 @@ from evaluateur import TupleStrategy
 
 # Available strategies
 TupleStrategy.CROSS_PRODUCT  # Cartesian product with seeded sampling
-TupleStrategy.DIRECT_LLM     # LLM-generated tuples
+TupleStrategy.AI             # LLM-generated tuples
 ```
 
 | Strategy | Description | Best For |
 |----------|-------------|----------|
 | `CROSS_PRODUCT` | Cartesian product with diversity-maximizing sampling | Systematic coverage |
-| `DIRECT_LLM` | LLM generates coherent combinations | Realistic scenarios |
+| `AI` | LLM generates coherent combinations | Realistic scenarios |
 
 ---
 
@@ -112,7 +112,7 @@ asyncio.run(main())
 
 ---
 
-## Direct LLM Strategy
+## AI Strategy
 
 Asks the LLM to generate tuples directly, which can produce more coherent combinations.
 
@@ -127,7 +127,7 @@ Asks the LLM to generate tuples directly, which can produce more coherent combin
 ```python
 async for t in evaluator.tuples(
     options,
-    strategy=TupleStrategy.DIRECT_LLM,
+    strategy=TupleStrategy.AI,
     count=20,
     instructions="Generate realistic patient scenarios",
 ):
@@ -135,7 +135,7 @@ async for t in evaluator.tuples(
 ```
 
 !!! note
-    `DIRECT_LLM` requires LLM calls and is slower than `CROSS_PRODUCT`.
+    `AI` requires LLM calls and is slower than `CROSS_PRODUCT`.
 
 ---
 
@@ -221,14 +221,14 @@ async for t in generator.generate(options, count=50, seed=42):
     print(t.values)
 ```
 
-### DirectLLMTupleGenerator
+### AITupleGenerator
 
 Generates tuples using an LLM.
 
 ```python
-from evaluateur.tuples import DirectLLMTupleGenerator
+from evaluateur.tuples import AITupleGenerator
 
-generator = DirectLLMTupleGenerator(client)
+generator = AITupleGenerator(client)
 
 async for t in generator.generate(
     options,
@@ -320,7 +320,7 @@ async def main() -> None:
     print("\nLLM-generated tuples:")
     async for t in evaluator.tuples(
         options,
-        strategy=TupleStrategy.DIRECT_LLM,
+        strategy=TupleStrategy.AI,
         count=10,
         instructions="Create realistic enterprise scenarios",
     ):

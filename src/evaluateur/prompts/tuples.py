@@ -1,7 +1,7 @@
 """Prompt templates for tuple generation.
 
 These templates define the policy for how the LLM should generate tuples
-from dimension options. The mechanism (DirectLLMTupleGenerator) uses these
+from dimension options. The mechanism (AITupleGenerator) uses these
 to build actual prompts.
 """
 

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from .base import TupleStrategy
 from .cross_product import CrossProductTupleGenerator
-from .direct_llm import DirectLLMTupleGenerator
+from .ai import AITupleGenerator
 
 __all__ = [
+    "AITupleGenerator",
     "CrossProductTupleGenerator",
-    "DirectLLMTupleGenerator",
     "TupleStrategy",
 ]
