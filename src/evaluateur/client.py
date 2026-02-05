@@ -8,7 +8,7 @@ import instructor
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-DEFAULT_MODEL_NAME = os.getenv("EVALUATEUR_MODEL_NAME", "gpt-4o-mini")
+DEFAULT_MODEL_NAME = os.getenv("EVALUATEUR_MODEL_NAME", "gpt-4.1-mini")
 
 
 @dataclass

@@ -24,7 +24,7 @@ TupleStrategy.DIRECT_LLM     # LLM-generated tuples
 
 | Strategy | Description | Best For |
 |----------|-------------|----------|
-| `CROSS_PRODUCT` | Cartesian product with uniform sampling | Systematic coverage |
+| `CROSS_PRODUCT` | Cartesian product with diversity-maximizing sampling | Systematic coverage |
 | `DIRECT_LLM` | LLM generates coherent combinations | Realistic scenarios |
 
 ---
@@ -51,9 +51,9 @@ The full cross product is:
 ("Aetna", "adult"), ("Aetna", "pediatric")
 ```
 
-### Seeded Sampling
+### Diversity-Maximizing Sampling
 
-When `count < total_combinations`, uses Floyd's algorithm for uniform sampling without replacement:
+When `count < total_combinations`, uses Farthest Point Sampling (FPS) to select tuples that are maximally diverse across all dimensions:
 
 ```python
 async for t in evaluator.tuples(
@@ -65,11 +65,18 @@ async for t in evaluator.tuples(
     print(t.values)
 ```
 
+**How it works:**
+
+1. Select a random first point (seeded for determinism)
+2. For each subsequent selection, choose the candidate that differs from all already-selected tuples on the most dimensions
+3. Distance is measured using Hamming distance (count of dimensions where values differ)
+
 **Properties:**
 
 - Reproducible with same seed
-- Uniform distribution across the space
+- Maximizes diversity: each sample differs from previous samples on as many dimensions as possible
 - No replacement (each tuple appears at most once)
+- Greedy algorithm with strong spread guarantees
 
 ### Example
 
@@ -245,19 +252,21 @@ async for t in evaluator.tuples(options, count=100):
     print(t.values)
 ```
 
-### Seeded Sampling
+### Diversity Sampling
 
-When `count < total_combinations`:
+When `count < total_combinations`, Farthest Point Sampling ensures maximum spread:
 
 ```python
-# Same seed = same 10 tuples
+# Same seed = same 10 diverse tuples
 async for t in evaluator.tuples(options, count=10, seed=42):
     print(t.values)
 
-# Different seed = different 10 tuples
+# Different seed = different 10 diverse tuples (different starting point)
 async for t in evaluator.tuples(options, count=10, seed=43):
     print(t.values)
 ```
+
+Unlike uniform random sampling, consecutive samples will differ on multiple dimensions rather than potentially differing on just one.
 
 ### Reproducibility
 

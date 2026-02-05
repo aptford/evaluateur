@@ -74,7 +74,7 @@ async for t in evaluator.tuples(
     print(t.values)
 ```
 
-When `count` is less than total combinations, Evaluateur uses seeded uniform sampling (Floyd's algorithm) to select a representative subset.
+When `count` is less than total combinations, Evaluateur uses Farthest Point Sampling (FPS) to select a maximally diverse subset. Each selected tuple differs from all previously selected tuples on as many dimensions as possible, ensuring broad coverage of the evaluation space.
 
 #### Direct LLM
 
@@ -126,6 +126,12 @@ async for q in evaluator.run(
 ### Systematic Coverage
 
 By defining dimensions explicitly, you ensure coverage of important combinations that might be missed when writing test cases manually.
+
+### Maximum Diversity
+
+When sampling a subset, Evaluateur uses Farthest Point Sampling to maximize diversity. This ensures that sampled tuples differ from each other on as many dimensions as possible, rather than clustering around similar combinations.
+
+For example, with healthcare scenarios, you avoid getting multiple samples that only differ by age while keeping payer, indication, and state the same. Instead, each sample explores a different region of the evaluation space.
 
 ### Reproducibility
 

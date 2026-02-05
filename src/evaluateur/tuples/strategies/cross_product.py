@@ -21,12 +21,20 @@ class CrossProductTupleGenerator:
 
     This mirrors the "cross product then filter" approach from Hamel Husain's
     FAQ: it guarantees coverage of the dimension space at the cost of volume.
+
+    When sampling a subset, uses Farthest Point Sampling (FPS) to maximize
+    diversity across all dimensions. Each selected sample is chosen to be
+    maximally different from all previously selected samples.
     """
+
+    _POOL_CAP = 10_000
 
     def __init__(self, client: LLMClient | None = None) -> None:
         self._client = client
 
-    def _index_to_combo(self, index: int, value_lists: list[list[object]]) -> tuple[object, ...]:
+    def _index_to_combo(
+        self, index: int, value_lists: list[list[object]]
+    ) -> tuple[object, ...]:
         """Map a flat index into the cartesian product tuple (mixed-radix decomposition)."""
 
         if not value_lists:
@@ -46,25 +54,97 @@ class CrossProductTupleGenerator:
             out[i] = value_lists[i][digit]
         return tuple(out)
 
-    def _sample_indices_floyd(self, *, total: int, k: int, rng: random.Random) -> list[int]:
-        """Sample k unique integers from range(total) uniformly (Floyd's algorithm)."""
+    def _hamming_distance(
+        self, combo_a: tuple[object, ...], combo_b: tuple[object, ...]
+    ) -> int:
+        """Count dimensions where values differ (Hamming distance)."""
+        return sum(1 for a, b in zip(combo_a, combo_b) if a != b)
 
+    def _sample_indices_diverse(
+        self,
+        *,
+        total: int,
+        k: int,
+        value_lists: list[list[object]],
+        rng: random.Random,
+    ) -> list[int]:
+        """Sample k indices using Farthest Point Sampling for maximum diversity.
+
+        This algorithm greedily selects points that maximize the minimum distance
+        to all previously selected points. The distance metric is Hamming distance
+        (count of dimensions where values differ).
+
+        To avoid materializing the full cartesian product (which can be enormous),
+        FPS operates on a bounded candidate pool. For small spaces the pool covers
+        every combination; for large spaces a random subset is drawn first.
+
+        Algorithm:
+            1. Build a candidate pool (all indices if small, random sample if large)
+            2. Select a random first point from the pool (seeded for determinism)
+            3. For each subsequent selection, find the pool candidate that maximizes
+               its minimum distance to the already-selected set
+            4. Repeat until k points are selected
+
+        Time complexity: O(k * P * d) where P = min(total, POOL_CAP), d = dimensions
+        Space complexity: O(P) for tracking minimum distances
+
+        Args:
+            total: Total number of combinations in the cross product
+            k: Number of samples to select
+            value_lists: List of value options per dimension
+            rng: Seeded random number generator for determinism
+
+        Returns:
+            List of k indices into the cross product space
+        """
         if k <= 0:
             return []
         if k >= total:
             return list(range(total))
 
-        selected: set[int] = set()
-        # Iterate j over the last k values in [0, total).
-        for j in range(total - k, total):
-            t = rng.randrange(0, j + 1)
-            if t in selected:
-                selected.add(j)
-            else:
-                selected.add(t)
-        indices = list(selected)
-        rng.shuffle(indices)
-        return indices
+        # Bound the candidate pool to avoid materializing huge spaces.
+        pool_size = min(total, max(k * 10, self._POOL_CAP))
+        if pool_size >= total:
+            pool_indices = list(range(total))
+        else:
+            pool_indices = rng.sample(range(total), pool_size)
+
+        pool_combos = [self._index_to_combo(idx, value_lists) for idx in pool_indices]
+
+        # Select first point randomly (seeded for reproducibility)
+        first = rng.randrange(len(pool_indices))
+        selected = [first]
+
+        # min_distance[i] = minimum Hamming distance from pool combo i to any selected combo
+        # -1 means the combo has been selected (sentinel value)
+        min_distance = [
+            self._hamming_distance(pool_combos[i], pool_combos[first])
+            for i in range(len(pool_indices))
+        ]
+        min_distance[first] = -1  # Mark as selected
+
+        # Greedily select k-1 more points
+        for _ in range(k - 1):
+            # Find candidate with maximum min_distance (farthest from selected set)
+            best_pool_idx = -1
+            best_dist = -1
+            for i in range(len(pool_indices)):
+                if min_distance[i] > best_dist:
+                    best_dist = min_distance[i]
+                    best_pool_idx = i
+
+            selected.append(best_pool_idx)
+            new_combo = pool_combos[best_pool_idx]
+
+            # Update min_distances based on newly selected point
+            for i in range(len(pool_indices)):
+                if min_distance[i] >= 0:  # Not yet selected
+                    d = self._hamming_distance(pool_combos[i], new_combo)
+                    if d < min_distance[i]:
+                        min_distance[i] = d
+            min_distance[best_pool_idx] = -1  # Mark as selected
+
+        return [pool_indices[i] for i in selected]
 
     async def generate(
         self,
@@ -95,15 +175,19 @@ class CrossProductTupleGenerator:
             len(field_names),
         )
 
-        # If we want a strict subset, sample uniformly without replacement with a deterministic RNG.
+        # If we want a strict subset, use diversity-maximizing sampling.
         if 0 < count < total:
             rng = random.Random(seed)
-            indices = self._sample_indices_floyd(total=total, k=count, rng=rng)
+            indices = self._sample_indices_diverse(
+                total=total, k=count, value_lists=value_lists, rng=rng  # type: ignore[arg-type]
+            )
             yielded = 0
             for idx in indices:
                 combo = self._index_to_combo(idx, value_lists)  # type: ignore[arg-type]
                 yielded += 1
-                yield GeneratedTuple(values={name: value for name, value in zip(field_names, combo)})
+                yield GeneratedTuple(
+                    values={name: value for name, value in zip(field_names, combo)}
+                )
             log.debug("CrossProductTupleGenerator: yielded %d tuples", yielded)
             return
 
@@ -114,6 +198,8 @@ class CrossProductTupleGenerator:
         yielded = 0
         for combo in combos:
             yielded += 1
-            yield GeneratedTuple(values={name: value for name, value in zip(field_names, combo)})
+            yield GeneratedTuple(
+                values={name: value for name, value in zip(field_names, combo)}
+            )
 
         log.debug("CrossProductTupleGenerator: yielded %d tuples", yielded)
