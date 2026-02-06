@@ -9,7 +9,7 @@ from evaluateur import Evaluator
 
 # Simple: pass a "provider/model-name" string
 evaluator = Evaluator(MyModel, llm="openai/gpt-4.1-mini")
-evaluator = Evaluator(MyModel, llm="anthropic/claude-4-5-haiku-latest")
+evaluator = Evaluator(MyModel, llm="anthropic/claude-haiku-4-5-20251001")
 
 # Default: reads EVALUATEUR_MODEL env var
 evaluator = Evaluator(MyModel)
@@ -19,7 +19,7 @@ import instructor
 from openai import AsyncOpenAI
 
 inst = instructor.from_openai(AsyncOpenAI())
-evaluator = Evaluator(MyModel, client=inst, model_name="claude-4-5-haiku-latest")
+evaluator = Evaluator(MyModel, client=inst, model_name="claude-haiku-4-5-20251001")
 ```
 
 ## Environment Variables

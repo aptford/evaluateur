@@ -7,7 +7,6 @@ from evaluateur.goals.models import (
     GoalMode,
     GoalSpec,
 )
-from evaluateur.goals.parsing import parse_goal_spec
 from evaluateur.goals.policy import (
     select_plan_type,
     should_include_goal_spec_in_full_plan,
@@ -21,8 +20,6 @@ __all__ = [
     "GoalLayer",
     "GoalMode",
     "GoalSpec",
-    # Parsing
-    "parse_goal_spec",
     # Policy
     "select_plan_type",
     "should_include_goal_spec_in_full_plan",

@@ -47,7 +47,7 @@ export OPENAI_API_KEY=sk-your-api-key-here
 By default, Evaluateur uses `openai/gpt-4.1-mini`. Override with the `EVALUATEUR_MODEL` environment variable:
 
 ```bash
-export EVALUATEUR_MODEL=anthropic/claude-4-5-haiku-latest
+export EVALUATEUR_MODEL=anthropic/claude-haiku-4-5-20251001
 ```
 
 Or configure programmatically:
@@ -55,7 +55,7 @@ Or configure programmatically:
 ```python
 from evaluateur import Evaluator
 
-evaluator = Evaluator(MyModel, llm="anthropic/claude-4-5-haiku-latest")
+evaluator = Evaluator(MyModel, llm="anthropic/claude-haiku-4-5-20251001")
 ```
 
 ## Your First Evaluation

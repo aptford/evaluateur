@@ -35,7 +35,7 @@ def resolve_client(
     ----------
     llm
         A ``"provider/model-name"`` string, e.g. ``"openai/gpt-4.1-mini"``
-        or ``"anthropic/claude-3-5-sonnet-latest"``.  Mutually exclusive
+        or ``"anthropic/claude-haiku-4-5"``.  Mutually exclusive
         with *client*.
     client
         A pre-configured async Instructor client.  Must be paired with
@@ -72,7 +72,7 @@ def resolve_client(
     if "/" not in model_str:
         raise ValueError(
             f"Expected 'provider/model-name' format, got: {model_str!r}. "
-            f"Examples: 'openai/gpt-4.1-mini', 'anthropic/claude-3-5-sonnet-latest'"
+            f"Examples: 'openai/gpt-4.1-mini', 'anthropic/claude-haiku-4-5-20251001'"
         )
 
     _, name = model_str.split("/", 1)

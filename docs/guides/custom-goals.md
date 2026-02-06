@@ -256,17 +256,21 @@ async for q in evaluator.run(goals=goals):
 
 ## Converting Between Formats
 
-Parse free-form text into structured goals using `parse_goal_spec`:
+Parse free-form text into structured goals using `evaluator.parse_goals()`:
 
 ```python
-from evaluateur import parse_goal_spec
-from evaluateur.client import resolve_client
+from pydantic import BaseModel, Field
+from evaluateur import Evaluator
 
-client = resolve_client(llm="openai/gpt-4.1-mini")
+
+class Query(BaseModel):
+    topic: str = Field(..., description="subject area")
+
+
+evaluator = Evaluator(Query)
 
 # Parse free-form text
-spec = await parse_goal_spec(
-    client,
+spec = await evaluator.parse_goals(
     "Test freshness and citation accuracy. Cover error recovery workflows.",
 )
 

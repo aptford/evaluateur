@@ -92,6 +92,28 @@ class Evaluator:
             self._client.model_name,
         )
 
+    async def parse_goals(self, text: str) -> GoalSpec:
+        """Parse free-form text into a structured GoalSpec.
+
+        Uses the evaluator's configured LLM to extract structured goals
+        from natural language. Useful for inspecting or reusing parsed
+        goals across multiple runs.
+
+        Parameters
+        ----------
+        text
+            Free-form goal guidance text.
+
+        Returns
+        -------
+        GoalSpec
+            A structured goal specification. Returns an empty GoalSpec
+            if *text* is blank.
+        """
+        from evaluateur.goals.parsing import parse_goal_spec
+
+        return await parse_goal_spec(self._client, text)
+
     async def options(
         self, *, instructions: str | None = None, count_per_field: int | None = None
     ) -> BaseModel:
