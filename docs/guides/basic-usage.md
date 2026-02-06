@@ -228,7 +228,7 @@ Handle potential errors gracefully:
 ```python
 import asyncio
 from pydantic import BaseModel, Field
-from evaluateur import Evaluator, LLMClient
+from evaluateur import Evaluator
 
 
 class Query(BaseModel):
@@ -237,9 +237,7 @@ class Query(BaseModel):
 
 async def main() -> None:
     try:
-        # Explicit client for better error handling
-        client = LLMClient.from_env()
-        evaluator = Evaluator(Query, client=client)
+        evaluator = Evaluator(Query, llm="openai/gpt-4.1-mini")
 
         async for q in evaluator.run(tuple_count=10):
             print(q.query)

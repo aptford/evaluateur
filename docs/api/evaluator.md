@@ -33,7 +33,7 @@ evaluator = Evaluator(Query)
 
 ## Constructor
 
-### `__init__(model, *, client=None, config=None)`
+### `__init__(model, *, llm=None, client=None, model_name=None, config=None)`
 
 Create an evaluator for the given dimension model.
 
@@ -42,20 +42,30 @@ Create an evaluator for the given dimension model.
 | Name | Type | Description |
 |------|------|-------------|
 | `model` | `Type[BaseModel]` | Pydantic model defining evaluation dimensions |
-| `client` | `LLMClient | None` | LLM client to use. If `None`, creates one via `LLMClient.from_env()` |
+| `llm` | `str | None` | A `"provider/model-name"` string (e.g. `"openai/gpt-4.1-mini"`). Mutually exclusive with `client`. Defaults to `EVALUATEUR_MODEL` env var. |
+| `client` | `Any | None` | Pre-configured async Instructor client. Must be paired with `model_name`. Mutually exclusive with `llm`. |
+| `model_name` | `str | None` | Model name for `chat.completions.create()`. Required when `client` is provided. |
 | `config` | `EvaluatorConfig | None` | Configuration for default values. If `None`, uses `DEFAULT_CONFIG` |
 
 **Example:**
 
 ```python
-from evaluateur import Evaluator, LLMClient, EvaluatorConfig
+from evaluateur import Evaluator, EvaluatorConfig
 
-# Default client and config
+# Default (reads EVALUATEUR_MODEL env var)
 evaluator = Evaluator(Query)
 
-# Custom client
-client = LLMClient.from_env(model_name="gpt-4o")
-evaluator = Evaluator(Query, client=client)
+# Explicit model
+evaluator = Evaluator(Query, llm="openai/gpt-4.1-mini")
+
+# Switch providers
+evaluator = Evaluator(Query, llm="anthropic/claude-3-5-sonnet-latest")
+
+# Advanced: bring your own Instructor client
+import instructor
+from openai import AsyncOpenAI
+inst = instructor.from_openai(AsyncOpenAI())
+evaluator = Evaluator(Query, client=inst, model_name="gpt-4o")
 
 # Custom config with different defaults
 config = EvaluatorConfig(
@@ -63,7 +73,7 @@ config = EvaluatorConfig(
     options_count_per_field=10,
     goal_mode="full",
 )
-evaluator = Evaluator(Query, config=config)
+evaluator = Evaluator(Query, llm="openai/gpt-4o", config=config)
 ```
 
 ## EvaluatorConfig
@@ -281,12 +291,11 @@ async for q in evaluator.run(
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `model` | `Type[BaseModel]` | The dimension model |
-| `client` | `LLMClient` | The LLM client |
 | `config` | `EvaluatorConfig` | Configuration with default values |
 
 ## See Also
 
-- [LLMClient](client.md) - Client configuration
+- [Provider Configuration](../guides/provider-configuration.md) - Provider setup
 - [Goals](goals.md) - Goal specification
 - [Queries](queries.md) - Query data models
 - [Tuples](tuples.md) - Tuple strategies

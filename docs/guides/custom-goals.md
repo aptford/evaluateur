@@ -256,15 +256,16 @@ async for q in evaluator.run(goals=goals):
 
 ## Converting Between Formats
 
-Parse free-form text into structured goals:
+Parse free-form text into structured goals using `parse_goal_spec`:
 
 ```python
-from evaluateur import LLMClient, GoalSpec
+from evaluateur import parse_goal_spec
+from evaluateur.client import resolve_client
 
-client = LLMClient.from_env()
+client = resolve_client(llm="openai/gpt-4.1-mini")
 
 # Parse free-form text
-spec = await GoalSpec.from_text(
+spec = await parse_goal_spec(
     client,
     "Test freshness and citation accuracy. Cover error recovery workflows.",
 )
@@ -274,6 +275,9 @@ print(spec.components.items)
 print(spec.trajectories.items)
 print(spec.outcomes.items)
 ```
+
+In most cases, you don't need to call this directly — pass a string to
+`goals=` in `evaluator.run()` and it handles parsing automatically.
 
 ## Best Practices
 

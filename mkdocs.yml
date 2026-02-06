@@ -85,7 +85,7 @@ nav:
       - Provider Configuration: guides/provider-configuration.md
   - API Reference:
       - Evaluator: api/evaluator.md
-      - LLMClient: api/client.md
+      - Client Configuration: api/client.md
       - Goals: api/goals.md
       - Queries: api/queries.md
       - Tuples: api/tuples.md

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Sequence
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
 from pydantic import BaseModel
 
-from evaluateur.client import LLMClient
+from evaluateur.client import resolve_client
 from evaluateur.config import DEFAULT_CONFIG, EvaluatorConfig
 from evaluateur.goals.models import GoalMode, GoalSpec
 from evaluateur.goals.planning import plan_goal_guidance
@@ -32,25 +32,64 @@ class Evaluator:
     The evaluator is parameterized by a Pydantic model that describes the
     dimensions of a query (e.g. payer, age, complexity, geography).
 
-    The evaluator accepts an optional config for default values. When method
-    parameters are not provided, they fall back to the config defaults.
+    Parameters
+    ----------
+    model
+        A Pydantic model class describing query dimensions.
+    llm
+        A ``"provider/model-name"`` string, e.g. ``"openai/gpt-4.1-mini"``
+        or ``"anthropic/claude-3-5-sonnet-latest"``.  Mutually exclusive
+        with *client*.  When omitted, reads the ``EVALUATEUR_MODEL`` env
+        var (default: ``"openai/gpt-4.1-mini"``).
+    client
+        A pre-configured async Instructor client for advanced use cases
+        (observability wrappers, custom providers).  Must be paired with
+        *model_name*.  Mutually exclusive with *llm*.
+    model_name
+        The model identifier passed to ``chat.completions.create(model=...)``.
+        Required when *client* is provided, ignored otherwise.
+    config
+        Optional :class:`EvaluatorConfig` for default parameter values.
+
+    Examples
+    --------
+    Simple usage::
+
+        evaluator = Evaluator(MyQuery, llm="openai/gpt-4.1-mini")
+
+    Switch providers::
+
+        evaluator = Evaluator(MyQuery, llm="anthropic/claude-3-5-sonnet-latest")
+
+    Default from environment (reads ``EVALUATEUR_MODEL``)::
+
+        evaluator = Evaluator(MyQuery)
+
+    Advanced — bring your own Instructor client::
+
+        import instructor
+        from openai import AsyncOpenAI
+
+        inst = instructor.from_openai(AsyncOpenAI())
+        evaluator = Evaluator(MyQuery, client=inst, model_name="gpt-4o")
     """
 
     def __init__(
         self,
         model: Type[QueryModelT],
         *,
-        client: LLMClient | None = None,
+        llm: str | None = None,
+        client: Any | None = None,
+        model_name: str | None = None,
         config: EvaluatorConfig | None = None,
     ) -> None:
         self.model = model
-        self.client = client or LLMClient.from_env()
+        self._client = resolve_client(llm=llm, client=client, model_name=model_name)
         self.config = config or DEFAULT_CONFIG
         log.debug(
-            "Evaluator initialized: model=%s, provider=%s, model_name=%s",
+            "Evaluator initialized: model=%s, llm=%s",
             model.__name__,
-            self.client.provider,
-            self.client.model_name,
+            self._client.model_name,
         )
 
     async def options(
@@ -73,7 +112,7 @@ class Evaluator:
             self.model.__name__,
             effective_count,
         )
-        options_generator = OptionsGenerator(self.client)
+        options_generator = OptionsGenerator(self._client)
         result = await options_generator.generate_options(
             self.model,
             instructions=instructions,
@@ -124,7 +163,7 @@ class Evaluator:
 
         log.debug("Using options: %s", options)
 
-        tuple_gen = build_tuple_generator(client=self.client, strategy=effective_strategy)
+        tuple_gen = build_tuple_generator(client=self._client, strategy=effective_strategy)
         generated_count = 0
 
         async for t in tuple_gen.generate(
@@ -176,14 +215,14 @@ class Evaluator:
         )
 
         guidance = await plan_goal_guidance(
-            client=self.client,
+            client=self._client,
             goals=goals,
             goal_mode=effective_goal_mode,
             instructions=instructions,
             seed=effective_seed,
         )
 
-        query_gen = build_query_generator(client=self.client, mode=effective_query_mode)
+        query_gen = build_query_generator(client=self._client, mode=effective_query_mode)
 
         async for q in query_gen.generate(
             to_async_iterator(tuples),

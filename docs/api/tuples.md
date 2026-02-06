@@ -144,7 +144,8 @@ async for t in evaluator.tuples(
 Factory function to create tuple generators directly.
 
 ```python
-from evaluateur import LLMClient, TupleStrategy, build_tuple_generator
+from evaluateur import TupleStrategy, build_tuple_generator
+from evaluateur.client import resolve_client
 
 def build_tuple_generator(
     client: LLMClient,
@@ -156,7 +157,7 @@ def build_tuple_generator(
 
 | Name | Type | Description |
 |------|------|-------------|
-| `client` | `LLMClient` | LLM client for LLM-based strategies |
+| `client` | `LLMClient` | Internal client bundle (from `evaluateur.client`) for LLM-based strategies |
 | `strategy` | `TupleStrategy` | Generation strategy |
 
 **Returns:** A `TupleGenerator` instance.
@@ -164,10 +165,11 @@ def build_tuple_generator(
 **Example:**
 
 ```python
-from evaluateur import LLMClient, TupleStrategy, build_tuple_generator
+from evaluateur import TupleStrategy, build_tuple_generator
+from evaluateur.client import resolve_client
 
-client = LLMClient.from_env()
-generator = build_tuple_generator(client, TupleStrategy.CROSS_PRODUCT)
+client = resolve_client(llm="openai/gpt-4.1-mini")
+generator = build_tuple_generator(client=client, strategy=TupleStrategy.CROSS_PRODUCT)
 
 # Use directly
 async for t in generator.generate(options, count=50, seed=42):

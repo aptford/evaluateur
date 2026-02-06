@@ -87,14 +87,18 @@ def focus_weight(self, focus_area: GoalFocusArea) -> float
 Parse free-form text into a structured `GoalSpec`.
 
 ```python
-from evaluateur import LLMClient, parse_goal_spec
+from evaluateur import parse_goal_spec
+from evaluateur.client import resolve_client
 
-client = LLMClient.from_env()
+client = resolve_client(llm="openai/gpt-4.1-mini")
 spec = await parse_goal_spec(
     client,
     "Test freshness and citation accuracy. Include error recovery.",
 )
 ```
+
+In most cases, pass a string directly to `goals=` in `evaluator.run()` instead
+of calling this function manually.
 
 This function uses Instructor + Pydantic parsing to extract a stable schema
 from free-form text. It returns an empty `GoalSpec` if the text is empty.

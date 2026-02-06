@@ -44,19 +44,18 @@ export OPENAI_API_KEY=sk-your-api-key-here
 
 ### Model Selection
 
-By default, Evaluateur uses `gpt-4o-mini`. Override with the `EVALUATEUR_MODEL_NAME` environment variable:
+By default, Evaluateur uses `openai/gpt-4.1-mini`. Override with the `EVALUATEUR_MODEL` environment variable:
 
 ```bash
-export EVALUATEUR_MODEL_NAME=gpt-4o
+export EVALUATEUR_MODEL=anthropic/claude-4-5-haiku-latest
 ```
 
 Or configure programmatically:
 
 ```python
-from evaluateur import LLMClient, Evaluator
+from evaluateur import Evaluator
 
-client = LLMClient.from_env(model_name="gpt-4o")
-evaluator = Evaluator(MyModel, client=client)
+evaluator = Evaluator(MyModel, llm="anthropic/claude-4-5-haiku-latest")
 ```
 
 ## Your First Evaluation

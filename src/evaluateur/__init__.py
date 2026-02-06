@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .client import LLMClient
 from .config import DEFAULT_CONFIG, EvaluatorConfig
 from .evaluator import Evaluator
 from .goals import GoalItem, GoalLayer, GoalSpec
@@ -13,7 +12,6 @@ from .tuples import TupleStrategy, build_tuple_generator
 __all__ = [
     # Core
     "Evaluator",
-    "LLMClient",
     # Configuration (policy)
     "EvaluatorConfig",
     "DEFAULT_CONFIG",
