@@ -36,7 +36,7 @@ class EvaluatorConfig:
     tuples_count: int = 20
     tuples_seed: int = 0
     tuples_strategy: str = "cross_product"
-    goal_mode: str = "sample"
+    goal_mode: str = "cycle"
     query_mode: str = "instructor"
 
     def get_tuple_strategy(self) -> TupleStrategy:

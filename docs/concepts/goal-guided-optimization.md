@@ -129,6 +129,21 @@ async for q in evaluator.run(
     print(q.metadata.goal_focus_area)  # "components", "trajectories", or "outcomes"
 ```
 
+### Cycle Mode
+
+In cycle mode, Evaluateur **rotates through focus areas** consecutively, guaranteeing even coverage across all layers:
+
+```python
+async for q in evaluator.run(
+    goals=goals,
+    goal_mode="cycle",
+):
+    # Focus areas rotate: components → trajectories → outcomes → components → ...
+    print(q.metadata.goal_focus_area)
+```
+
+Use cycle mode when you want deterministic, balanced coverage across all focus areas without randomness.
+
 ### Full Mode
 
 In full mode, **all goals** are included in every query prompt:
@@ -174,9 +189,9 @@ async for q in evaluator.run(goals=goals):
     print(meta.goal_guided)  # True
 
     # Which goal mode was used?
-    print(meta.goal_mode)  # "sample" or "full"
+    print(meta.goal_mode)  # "sample", "cycle", or "full"
 
-    # Which layer was focused (in sample mode)?
+    # Which layer was focused (in sample/cycle mode)?
     print(meta.goal_focus_area)  # "components", "trajectories", or "outcomes"
 
     # The full goal spec used

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from evaluateur.queries.protocols import ContextBuilder
 
 GoalFocusArea = Literal["components", "trajectories", "outcomes"]
-GoalMode = Literal["full", "sample"]
+GoalMode = Literal["full", "sample", "cycle"]
 
 
 class GoalItem(BaseModel):

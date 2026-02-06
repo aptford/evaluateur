@@ -12,7 +12,7 @@ from evaluateur.goals.models import GoalFocusArea, GoalMode, GoalSpec
 
 
 # Type alias for plan builder functions
-PlanBuilderType = Literal["sample", "full"]
+PlanBuilderType = Literal["sample", "cycle", "full"]
 
 
 def select_plan_type(
@@ -26,15 +26,15 @@ def select_plan_type(
     to use. The mechanism (actual plan building) is handled by the planning module.
 
     Args:
-        goal_mode: The requested goal guidance mode ("sample" or "full").
+        goal_mode: The requested goal guidance mode ("sample", "cycle", or "full").
         goal_spec: The parsed goal specification, or None.
         focus_areas: Available focus areas from the goal spec.
 
     Returns:
-        The plan builder type to use: "sample" or "full".
+        The plan builder type to use: "sample", "cycle", or "full".
     """
-    if goal_mode == "sample" and goal_spec is not None and focus_areas:
-        return "sample"
+    if goal_mode in ("sample", "cycle") and goal_spec is not None and focus_areas:
+        return goal_mode  # type: ignore[return-value]
     return "full"
 
 
@@ -65,4 +65,4 @@ def should_warn_no_focus_areas(
     Returns:
         True if a warning should be logged.
     """
-    return goal_mode == "sample" and goal_spec is not None and not focus_areas
+    return goal_mode in ("sample", "cycle") and goal_spec is not None and not focus_areas

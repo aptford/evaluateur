@@ -80,6 +80,38 @@ class GoalSamplingContextBuilder:
         return ctx, {"goal_focus_area": focus}
 
 
+class RoundRobinContextBuilder:
+    """Per-tuple context builder that cycles through focus areas consecutively.
+
+    Unlike GoalSamplingContextBuilder which randomly samples a focus area,
+    this builder walks through focus areas in order, wrapping around when
+    all areas have been used. This guarantees even coverage across all
+    focus areas while exhausting every tuple.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_context: str | None,
+        goal_spec: GoalSpec,
+        focus_plan: GoalFocusPlan,
+    ) -> None:
+        self._base_context = base_context or ""
+        self._goal_spec = goal_spec
+        self._choices = focus_plan.choices
+        if not self._choices:
+            raise ValueError("RoundRobinContextBuilder requires at least one choice")
+        self._index = 0
+
+    def __call__(self, t: GeneratedTuple) -> tuple[str, Mapping[str, object]]:
+        _ = t
+        focus = self._choices[self._index % len(self._choices)]
+        self._index += 1
+        focus_prompt = self._goal_spec.render_focused_prompt(focus_area=focus)
+        ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
+        return ctx, {"goal_focus_area": focus}
+
+
 def resolve_focus_plan(
     goal_spec: GoalSpec, focus_areas: list[GoalFocusArea]
 ) -> GoalFocusPlan:

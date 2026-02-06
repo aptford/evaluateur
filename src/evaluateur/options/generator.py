@@ -16,7 +16,10 @@ class OptionsGenerator:
         self._client = client
 
     def _build_response_model(
-        self, original_model: Type[BaseModel], options_model: Type[BaseModel]
+        self,
+        original_model: Type[BaseModel],
+        options_model: Type[BaseModel],
+        count_per_field: int,
     ) -> Type[BaseModel]:
         """Create a Pydantic model for Instructor to populate options."""
         fields: dict[str, tuple[Any, Any]] = {}
@@ -40,7 +43,7 @@ class OptionsGenerator:
             description = field.description or f"Options for dimension '{name}'"
             fields[name] = (
                 field.annotation,
-                Field(default_factory=list, description=description),
+                Field(default_factory=list, description=description, min_length=count_per_field),
             )
 
         return create_model(
@@ -76,7 +79,7 @@ class OptionsGenerator:
             This allows customizing prompts without changing mechanism code.
         """
         options_model = create_options_model(model)
-        response_model = self._build_response_model(model, options_model)
+        response_model = self._build_response_model(model, options_model, count_per_field)
 
         system_message, user_message = prompt_formatter(
             model, count_per_field, instructions

@@ -17,7 +17,11 @@ from evaluateur.goals.policy import (
     should_include_goal_spec_in_full_plan,
     should_warn_no_focus_areas,
 )
-from evaluateur.goals.sampling import GoalSamplingContextBuilder, resolve_focus_plan
+from evaluateur.goals.sampling import (
+    GoalSamplingContextBuilder,
+    RoundRobinContextBuilder,
+    resolve_focus_plan,
+)
 from evaluateur.queries.context import compose_query_context
 from evaluateur.queries.models import QueryMetadata
 
@@ -86,6 +90,27 @@ def _build_sample_plan(
     )
 
 
+def _build_cycle_plan(
+    *,
+    goal_spec: GoalSpec,
+    run_metadata: QueryMetadata,
+    instructions: str | None,
+    focus_areas: list[GoalFocusArea],
+) -> GoalGuidancePlan:
+    focus_plan = resolve_focus_plan(goal_spec, focus_areas)
+    context_builder = RoundRobinContextBuilder(
+        base_context=instructions,
+        goal_spec=goal_spec,
+        focus_plan=focus_plan,
+    )
+    return GoalGuidancePlan(
+        goal_spec=goal_spec,
+        run_metadata=run_metadata,
+        context=instructions or "",
+        context_builder=context_builder,
+    )
+
+
 def _build_full_plan(
     *,
     goal_spec: GoalSpec | None,
@@ -142,6 +167,15 @@ async def plan_goal_guidance(
             instructions=instructions,
             focus_areas=focus_areas,
             seed=seed,
+        )
+
+    if plan_type == "cycle":
+        assert goal_spec is not None
+        return _build_cycle_plan(
+            goal_spec=goal_spec,
+            run_metadata=run_metadata,
+            instructions=instructions,
+            focus_areas=focus_areas,
         )
 
     # Check if we should warn about missing focus areas

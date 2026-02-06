@@ -199,7 +199,7 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
     for q in results:
         assert q.metadata.generator == "dummy"
         assert q.metadata.goal_guided is True
-        assert q.metadata.goal_mode == "sample"
+        assert q.metadata.goal_mode == "cycle"
         assert isinstance(q.metadata.query_goals, GoalSpec)
         assert q.metadata.query_goals.components.items[0].name == "force payer"
         assert q.metadata.goal_focus_area == "components"
@@ -280,6 +280,49 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
 
     assert counts["components"] > counts["trajectories"]
     assert counts["components"] > counts["outcomes"]
+
+
+async def test_evaluator_queries_cycle_mode_round_robins_focus_areas() -> None:
+    evaluator = Evaluator(Query)
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
+            async for t in tuples:
+                _, meta = context_builder(t)
+                yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
+
+    goals = GoalSpec(
+        components=GoalLayer(items=[GoalItem(name="c", weight=10.0)]),
+        trajectories=GoalLayer(items=[GoalItem(name="t", weight=1.0)]),
+        outcomes=GoalLayer(items=[GoalItem(name="o", weight=1.0)]),
+    )
+
+    tuples = [
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(9)
+    ]
+
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        results = [
+            q
+            async for q in evaluator.queries(
+                tuples=tuples,
+                goals=goals,
+                goal_mode="cycle",
+            )
+        ]
+
+    assert len(results) == 9
+    assert all(q.metadata.goal_mode == "cycle" for q in results)
+
+    # Cycle should produce: c, t, o, c, t, o, c, t, o
+    expected_areas = ["components", "trajectories", "outcomes"] * 3
+    actual_areas = [q.metadata.goal_focus_area for q in results]
+    assert actual_areas == expected_areas
 
 
 async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> None:

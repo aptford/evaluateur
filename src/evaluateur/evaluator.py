@@ -154,7 +154,7 @@ class Evaluator:
         instructions
             Optional instructions for query generation.
         goal_mode
-            Goal guidance mode ("sample" or "full"). Defaults to config.
+            Goal guidance mode ("sample", "cycle", or "full"). Defaults to config.
         query_mode
             Query generator mode. Defaults to config.
         seed
@@ -230,7 +230,7 @@ class Evaluator:
         seed
             Random seed for tuple sampling and goal sampling. Defaults to config.
         goal_mode
-            Goal guidance mode ("sample" or "full"). Defaults to config.
+            Goal guidance mode ("sample", "cycle", or "full"). Defaults to config.
         query_mode
             Query generator mode. Defaults to config.
         goals

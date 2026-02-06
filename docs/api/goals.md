@@ -235,12 +235,13 @@ GoalFocusArea = Literal["components", "trajectories", "outcomes"]
 ### GoalMode
 
 ```python
-GoalMode = Literal["full", "sample"]
+GoalMode = Literal["full", "sample", "cycle"]
 ```
 
 | Mode | Behavior |
 |------|----------|
-| `"sample"` | Pick one focus area per query (diverse) |
+| `"sample"` | Pick one focus area per query at random (diverse) |
+| `"cycle"` | Rotate through focus areas consecutively (even coverage) |
 | `"full"` | Include all goals in every query |
 
 ---
