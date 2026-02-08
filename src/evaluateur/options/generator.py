@@ -43,7 +43,12 @@ class OptionsGenerator:
             description = field.description or f"Options for dimension '{name}'"
             fields[name] = (
                 field.annotation,
-                Field(default_factory=list, description=description, min_length=count_per_field),
+                Field(
+                    default_factory=list,
+                    description=description,
+                    min_length=count_per_field,
+                    max_length=count_per_field,
+                ),
             )
 
         return create_model(
@@ -79,7 +84,9 @@ class OptionsGenerator:
             This allows customizing prompts without changing mechanism code.
         """
         options_model = create_options_model(model)
-        response_model = self._build_response_model(model, options_model, count_per_field)
+        response_model = self._build_response_model(
+            model, options_model, count_per_field
+        )
 
         system_message, user_message = prompt_formatter(
             model, count_per_field, instructions
