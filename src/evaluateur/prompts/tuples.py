@@ -17,7 +17,9 @@ TUPLES_SYSTEM_TEMPLATE = (
 TUPLES_USER_TEMPLATE = (
     "Using the following options per dimension, generate diverse tuples. "
     "Return around {count} combinations, preferring realistic and high-value cases.\n\n"
-    "{option_lines}"
+    "{option_lines}\n\n"
+    "This is variation {seed}. Produce a different, distinct set of tuples than "
+    "other variations would."
 )
 
 
@@ -45,6 +47,7 @@ def format_tuples_prompts(
     value_lists: list[list[object]],
     count: int,
     instructions: str | None = None,
+    seed: int = 0,
 ) -> tuple[str, str]:
     """Format prompts for tuple generation.
 
@@ -53,6 +56,7 @@ def format_tuples_prompts(
         value_lists: List of value lists, one per dimension.
         count: Number of tuples to generate.
         instructions: Optional additional instructions for the LLM.
+        seed: Variation number included in the prompt to encourage diverse outputs.
 
     Returns:
         A tuple of (system_message, user_message).
@@ -68,6 +72,7 @@ def format_tuples_prompts(
     user_message = TUPLES_USER_TEMPLATE.format(
         count=count,
         option_lines=option_lines,
+        seed=seed,
     )
 
     return system_message, user_message

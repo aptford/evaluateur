@@ -44,7 +44,7 @@ class AITupleGenerator:
         seed: int = 0,
         instructions: str | None = None,
         prompt_formatter: Callable[
-            [list[str], list[list[object]], int, str | None], tuple[str, str]
+            [list[str], list[list[object]], int, str | None, int], tuple[str, str]
         ] = format_tuples_prompts,
     ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples using the LLM.
@@ -56,23 +56,24 @@ class AITupleGenerator:
         count
             Number of tuples to generate.
         seed
-            Random seed (accepted for API consistency, not currently used).
+            Variation number included in the prompt to encourage diverse outputs.
         instructions
             Optional additional instructions for the LLM.
         prompt_formatter
             Callable that formats the prompts. Defaults to the standard formatter.
             This allows customizing prompts without changing mechanism code.
         """
-        # Note: `seed` is accepted for API consistency with other tuple generators,
-        # but is not currently used because the LLM backend is non-deterministic.
-        _ = seed
         client = self._client.instructor_client
         log.info("AITupleGenerator: requesting ~%d tuples from LLM", count)
 
         field_names, value_lists = extract_dimension_values(options)
 
         system_message, user_message = prompt_formatter(
-            field_names, value_lists, count, instructions
+            field_names,
+            value_lists,
+            count,
+            instructions,
+            seed,
         )
         log.debug("AITupleGenerator prompt:\n%s", user_message)
 
