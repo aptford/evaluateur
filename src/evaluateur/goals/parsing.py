@@ -1,7 +1,6 @@
 """Goal specification parsing.
 
-This module provides the mechanism for parsing free-form text into
-structured GoalSpec objects using LLM-based extraction.
+Parses free-form text into structured GoalSpec objects using LLM extraction.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ class _Message(TypedDict):
 
 
 def build_goal_spec_messages(text: str) -> list[_Message]:
-    """Build instructor messages for parsing free-form goal guidance."""
+    """Build instructor messages for parsing goal guidance text."""
     cleaned = text.strip()
     if not cleaned:
         return []
@@ -31,21 +30,16 @@ def build_goal_spec_messages(text: str) -> list[_Message]:
     ]
 
 
-async def parse_goal_spec(client: LLMClient, text: str) -> GoalSpec:
-    """Parse free-form user text into a structured GoalSpec.
-
-    This is a factory function that uses Instructor + Pydantic parsing
-    to extract a stable schema from free-form text.
+async def parse_goal_spec(client: "LLMClient", text: str) -> "GoalSpec":
+    """Parse user text into a structured GoalSpec using an LLM.
 
     Args:
-        client: The LLM client to use for parsing.
-        text: The free-form text to parse.
+        client: The LLM client for parsing.
+        text: The text to parse.
 
     Returns:
-        A GoalSpec instance. Returns an empty GoalSpec if text is empty
-        or cannot be parsed.
+        A GoalSpec instance. Returns an empty GoalSpec if text is empty.
     """
-    # Import here to avoid circular imports
     from evaluateur.goals.models import GoalSpec
 
     cleaned = text.strip()

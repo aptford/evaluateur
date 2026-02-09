@@ -4,7 +4,7 @@ from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from evaluateur.goals.models import GoalFocusArea, GoalMode, GoalSpec
+from evaluateur.goals.models import GoalMode, GoalSpec
 from evaluateur.options.types import ScalarValue
 
 
@@ -39,7 +39,8 @@ class QueryMetadata(BaseModel):
     goal_guided: bool = False
     query_goals: GoalSpec | None = None
     goal_mode: GoalMode | None = None
-    goal_focus_area: GoalFocusArea | None = None
+    goal_focus: str | None = None
+    goal_category: str | None = None
 
 
 class GeneratedQuery(BaseModel):

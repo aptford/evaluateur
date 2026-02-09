@@ -1,21 +1,28 @@
+"""Goal sampling mechanisms.
+
+Provides weighted random sampling and round-robin cycling over
+individual Goals (not CTO layers).
+"""
+
 from __future__ import annotations
 
 import math
 import random
 from collections.abc import Mapping
 
+from evaluateur.goals.models import Goal, GoalFocusPlan, GoalSpec
+from evaluateur.goals.rendering import render_focused_goal_prompt
 from evaluateur.queries.context import compose_query_context
-from evaluateur.goals.models import GoalFocusArea, GoalFocusPlan, GoalSpec
 from evaluateur.queries.models import GeneratedTuple
 
 
 class WeightedSampler:
-    """Numerically-stable sampler for weighted categories."""
+    """Numerically-stable sampler for weighted goals."""
 
     def __init__(
         self,
         *,
-        choices: list[GoalFocusArea],
+        choices: list[Goal],
         weights: list[float],
         rng: random.Random,
     ) -> None:
@@ -25,7 +32,7 @@ class WeightedSampler:
         self._weights = weights
         self._rng = rng
 
-    def sample(self) -> GoalFocusArea:
+    def sample(self) -> Goal:
         if not self._choices:
             raise ValueError("WeightedSampler requires at least one choice")
 
@@ -48,7 +55,7 @@ class WeightedSampler:
 
 
 class GoalSamplingContextBuilder:
-    """Per-tuple context builder that samples a goal focus area."""
+    """Per-tuple context builder that samples an individual goal."""
 
     def __init__(
         self,
@@ -67,26 +74,25 @@ class GoalSamplingContextBuilder:
             rng=rng,
         )
 
-    def _choose_focus_area(self) -> GoalFocusArea:
-        """Choose a focus area using numerically-stable weighted sampling."""
-
-        return self._sampler.sample()
-
     def __call__(self, t: GeneratedTuple) -> tuple[str, Mapping[str, object]]:
         _ = t
-        focus = self._choose_focus_area()
-        focus_prompt = self._goal_spec.render_focused_prompt(focus_area=focus)
+        goal = self._sampler.sample()
+        focus_prompt = render_focused_goal_prompt(goal)
         ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
-        return ctx, {"goal_focus_area": focus}
+        meta: dict[str, object] = {}
+        if goal.name:
+            meta["goal_focus"] = goal.name
+        if goal.category:
+            meta["goal_category"] = goal.category
+        return ctx, meta
 
 
 class RoundRobinContextBuilder:
-    """Per-tuple context builder that cycles through focus areas consecutively.
+    """Per-tuple context builder that cycles through individual goals.
 
-    Unlike GoalSamplingContextBuilder which randomly samples a focus area,
-    this builder walks through focus areas in order, wrapping around when
-    all areas have been used. This guarantees even coverage across all
-    focus areas while exhausting every tuple.
+    Unlike GoalSamplingContextBuilder which randomly samples a goal,
+    this builder walks through goals in order, wrapping around when
+    all goals have been used.
     """
 
     def __init__(
@@ -105,25 +111,23 @@ class RoundRobinContextBuilder:
 
     def __call__(self, t: GeneratedTuple) -> tuple[str, Mapping[str, object]]:
         _ = t
-        focus = self._choices[self._index % len(self._choices)]
+        goal = self._choices[self._index % len(self._choices)]
         self._index += 1
-        focus_prompt = self._goal_spec.render_focused_prompt(focus_area=focus)
+        focus_prompt = render_focused_goal_prompt(goal)
         ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
-        return ctx, {"goal_focus_area": focus}
+        meta: dict[str, object] = {}
+        if goal.name:
+            meta["goal_focus"] = goal.name
+        if goal.category:
+            meta["goal_category"] = goal.category
+        return ctx, meta
 
 
-def resolve_focus_plan(
-    goal_spec: GoalSpec, focus_areas: list[GoalFocusArea]
-) -> GoalFocusPlan:
-    weights = [goal_spec.focus_weight(focus) for focus in focus_areas]
-    active_pairs = [(focus, weight) for focus, weight in zip(focus_areas, weights)]
-    active_pairs = [(focus, weight) for focus, weight in active_pairs if weight > 0.0]
+def resolve_focus_plan(goal_spec: GoalSpec) -> GoalFocusPlan:
+    """Resolve active goals and their weights into a GoalFocusPlan."""
+    active = goal_spec.available_goals()
+    if not active:
+        return GoalFocusPlan(choices=[], weights=[])
 
-    if active_pairs:
-        choices = [focus for focus, _ in active_pairs]
-        choice_weights = [weight for _, weight in active_pairs]
-    else:
-        choices = focus_areas
-        choice_weights = [1.0 for _ in focus_areas]
-
-    return GoalFocusPlan(choices=choices, weights=choice_weights)
+    weights = [g.weight for g in active]
+    return GoalFocusPlan(choices=active, weights=weights)

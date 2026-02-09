@@ -4,20 +4,23 @@ Data models for goal-guided query optimization.
 
 ## Overview
 
-The goals system uses a three-layer framework:
+The goals system uses a flat list of `Goal` objects, optionally categorized using the CTO framework:
 
 - **Components**: System internals (freshness, citations, data handling)
 - **Trajectories**: User journeys (workflows, error recovery, multi-step)
 - **Outcomes**: Output qualities (actionable, clear, accurate)
 
-```python
-from evaluateur import GoalItem, GoalLayer, GoalSpec
+Categories are optional. You can use any string or skip them entirely.
 
-goals = GoalSpec(
-    components=GoalLayer(items=[GoalItem(name="freshness")]),
-    trajectories=GoalLayer(items=[GoalItem(name="error recovery")]),
-    outcomes=GoalLayer(items=[GoalItem(name="actionable")]),
-)
+```python
+from evaluateur import Goal, GoalSpec
+
+goals = GoalSpec(goals=[
+    Goal(name="freshness", text="Test data currency", category="components"),
+    Goal(name="error recovery", text="Test error handling", category="trajectories"),
+    Goal(name="actionable", text="Request clear next steps", category="outcomes"),
+    Goal(name="edge cases", text="Cover unusual inputs"),  # no category
+])
 ```
 
 ## GoalSpec
@@ -29,19 +32,15 @@ Top-level container for goal guidance.
       show_source: true
       members:
         - is_empty
+        - available_goals
         - render_prompt
-        - available_focus_areas
-        - focus_weight
-        - render_focused_prompt
         - to_metadata
 
 ### Constructor
 
 ```python
 GoalSpec(
-    components: GoalLayer = GoalLayer(),
-    trajectories: GoalLayer = GoalLayer(),
-    outcomes: GoalLayer = GoalLayer(),
+    goals: list[Goal] = [],
 )
 ```
 
@@ -49,36 +48,84 @@ GoalSpec(
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `components` | `GoalLayer` | System component goals |
-| `trajectories` | `GoalLayer` | User journey goals |
-| `outcomes` | `GoalLayer` | Output quality goals |
+| `goals` | `list[Goal]` | Flat list of evaluation goals |
 
 ### Methods
 
 #### `is_empty()`
 
-Check if no goals are specified.
+Check if no active goals are specified.
 
 ```python
 def is_empty(self) -> bool
 ```
 
-#### `available_focus_areas()`
+Returns `True` if no goals exist or all have weight <= 0.
 
-Get non-empty goal layers.
+#### `available_goals()`
 
-```python
-def available_focus_areas(self) -> list[GoalFocusArea]
-# Returns: ["components", "trajectories", "outcomes"] (only non-empty ones)
-```
-
-#### `focus_weight()`
-
-Get the effective weight for a focus area.
+Get goals with positive weight.
 
 ```python
-def focus_weight(self, focus_area: GoalFocusArea) -> float
+def available_goals(self) -> list[Goal]
 ```
+
+#### `render_prompt()`
+
+Render the spec into a compact prompt string.
+
+```python
+def render_prompt(self) -> str
+```
+
+---
+
+## Goal
+
+A single evaluation goal for shaping query generation.
+
+::: evaluateur.Goal
+    options:
+      show_source: true
+
+### Constructor
+
+```python
+Goal(
+    name: str = "",
+    text: str,
+    weight: float = 1.0,
+    category: str = "",
+)
+```
+
+**Fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | `""` | Short goal label |
+| `text` | `str` | required | Full goal description |
+| `weight` | `float` | `1.0` | Relative importance (0 disables) |
+| `category` | `str` | `""` | Optional category (CTO or custom) |
+
+**Example:**
+
+```python
+from evaluateur import Goal
+
+goal = Goal(
+    name="citation accuracy",
+    text="Ensure all claims reference specific sources with publication dates",
+    weight=1.5,
+    category="components",
+)
+```
+
+### Weight Behavior
+
+- `weight > 0`: Normal goal, sampled proportionally
+- `weight = 0`: Disabled (excluded from sampling)
+- Higher weight = more likely to be sampled
 
 ---
 
@@ -99,146 +146,29 @@ spec = await evaluator.parse_goals(
 )
 ```
 
+Structured text (numbered/bulleted lists) is parsed without an LLM call. Free-form text falls back to LLM enrichment.
+
 In most cases, pass a string directly to `goals=` in `evaluator.run()` instead
 of calling this method manually.
 
-This method uses Instructor + Pydantic parsing to extract a stable schema
-from free-form text. It returns an empty `GoalSpec` if the text is empty.
+---
+
+## CTO Constants
+
+Well-known category constants for the CTO framework:
+
+```python
+from evaluateur.goals.constants import COMPONENTS, TRAJECTORIES, OUTCOMES, CTO_CATEGORIES
+
+COMPONENTS    # "components"
+TRAJECTORIES  # "trajectories"
+OUTCOMES      # "outcomes"
+CTO_CATEGORIES  # ("components", "trajectories", "outcomes")
+```
 
 ---
 
-## GoalLayer
-
-A collection of goals for one framework layer.
-
-::: evaluateur.GoalLayer
-    options:
-      show_source: true
-      members:
-        - weight
-        - has_content
-
-### Constructor
-
-```python
-GoalLayer(
-    summary: str | None = None,
-    items: list[GoalItem] = [],
-)
-```
-
-**Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `summary` | `str | None` | One-paragraph summary of what matters |
-| `items` | `list[GoalItem]` | Individual goals in this layer |
-
-**Example:**
-
-```python
-from evaluateur import GoalItem, GoalLayer
-
-layer = GoalLayer(
-    summary="Test data freshness and citation accuracy",
-    items=[
-        GoalItem(name="freshness checks"),
-        GoalItem(name="source attribution"),
-    ],
-)
-```
-
-### Methods
-
-#### `weight()`
-
-Calculate the effective weight for this layer.
-
-```python
-def weight(self) -> float
-```
-
-Returns the sum of item weights, or 1.0 if only a summary exists.
-
-#### `has_content()`
-
-Check if the layer has any active content.
-
-```python
-def has_content(self) -> bool
-```
-
-Returns `True` if there's a summary or any items with weight > 0.
-
----
-
-## GoalItem
-
-A single goal for shaping query generation.
-
-::: evaluateur.GoalItem
-    options:
-      show_source: true
-
-### Constructor
-
-```python
-GoalItem(
-    name: str,
-    description: str | None = None,
-    weight: float = 1.0,
-    must_include: list[str] = [],
-    avoid: list[str] = [],
-    examples: list[str] = [],
-)
-```
-
-**Fields:**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | `str` | required | Short goal name |
-| `description` | `str | None` | `None` | Detailed description |
-| `weight` | `float` | `1.0` | Relative importance (0 disables) |
-| `must_include` | `list[str]` | `[]` | Required terms/phrases |
-| `avoid` | `list[str]` | `[]` | Terms to avoid |
-| `examples` | `list[str]` | `[]` | Example queries |
-
-**Example:**
-
-```python
-from evaluateur import GoalItem
-
-item = GoalItem(
-    name="citation accuracy",
-    description="Ensure all claims reference specific sources",
-    weight=1.5,
-    must_include=["cite", "source", "reference"],
-    avoid=["probably", "might be"],
-    examples=[
-        "Which study supports this recommendation?",
-        "Can you cite the policy section?",
-    ],
-)
-```
-
-### Weight Behavior
-
-- `weight > 0`: Normal goal, sampled proportionally
-- `weight = 0`: Disabled (excluded from sampling)
-- Higher weight = more likely to be sampled
-
----
-
-## Type Aliases
-
-### GoalFocusArea
-
-```python
-GoalFocusArea = Literal["components", "trajectories", "outcomes"]
-```
-
-### GoalMode
+## GoalMode
 
 ```python
 GoalMode = Literal["full", "sample", "cycle"]
@@ -246,8 +176,8 @@ GoalMode = Literal["full", "sample", "cycle"]
 
 | Mode | Behavior |
 |------|----------|
-| `"sample"` | Pick one focus area per query at random (diverse) |
-| `"cycle"` | Rotate through focus areas consecutively (even coverage) |
+| `"sample"` | Pick one goal per query at random (weighted) |
+| `"cycle"` | Rotate through goals consecutively (even coverage) |
 | `"full"` | Include all goals in every query |
 
 ---
@@ -257,7 +187,7 @@ GoalMode = Literal["full", "sample", "cycle"]
 ```python
 import asyncio
 from pydantic import BaseModel, Field
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
+from evaluateur import Evaluator, Goal, GoalSpec
 
 
 class Query(BaseModel):
@@ -267,47 +197,36 @@ class Query(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    goals = GoalSpec(
-        components=GoalLayer(
-            summary="Test system reliability",
-            items=[
-                GoalItem(
-                    name="freshness",
-                    must_include=["current", "latest", "updated"],
-                    weight=2.0,
-                ),
-                GoalItem(
-                    name="citations",
-                    must_include=["source", "reference"],
-                ),
-            ],
+    goals = GoalSpec(goals=[
+        Goal(
+            name="freshness",
+            text="Queries should ask about current data and latest versions",
+            category="components",
+            weight=2.0,
         ),
-        trajectories=GoalLayer(
-            items=[
-                GoalItem(
-                    name="error handling",
-                    description="Test graceful degradation",
-                    examples=["What if the data is missing?"],
-                ),
-            ],
+        Goal(
+            name="citations",
+            text="Queries should request source references",
+            category="components",
         ),
-        outcomes=GoalLayer(
-            items=[
-                GoalItem(
-                    name="actionable",
-                    must_include=["next steps", "recommendation"],
-                    avoid=["unclear", "maybe"],
-                ),
-            ],
+        Goal(
+            name="error handling",
+            text="Test graceful degradation when data is missing",
+            category="trajectories",
         ),
-    )
+        Goal(
+            name="actionable",
+            text="Queries should request next steps and recommendations",
+            category="outcomes",
+        ),
+    ])
 
     async for q in evaluator.run(
         goals=goals,
         goal_mode="sample",
         tuple_count=10,
     ):
-        print(f"[{q.metadata.goal_focus_area}] {q.query}")
+        print(f"[{q.metadata.goal_focus}] {q.query}")
 
 
 asyncio.run(main())

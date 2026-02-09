@@ -1,82 +1,73 @@
+"""Goal prompt rendering.
+
+Renders GoalSpec and individual Goals into compact prompt strings
+for query generation context.
+"""
+
 from __future__ import annotations
 
-import textwrap
-from typing import TYPE_CHECKING, Iterable
+from itertools import groupby
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from evaluateur.goals.models import GoalFocusArea, GoalItem, GoalLayer, GoalSpec
+    from evaluateur.goals.models import Goal, GoalSpec
 
 
-_FOCUS_LABELS: dict[str, str] = {
-    "components": "Components",
-    "trajectories": "Trajectories",
-    "outcomes": "Outcomes",
-}
-
-
-def _render_items(items: Iterable["GoalItem"]) -> list[str]:
-    lines: list[str] = []
-    for it in items:
-        if it.weight <= 0:
-            continue
-        parts: list[str] = [it.name]
-        if it.description:
-            parts.append(it.description)
-
-        line = " - ".join(parts)
-        extra: list[str] = []
-        if it.must_include:
-            extra.append(
-                "must include: " + ", ".join(f"`{token}`" for token in it.must_include)
-            )
-        if it.avoid:
-            extra.append("avoid: " + ", ".join(f"`{token}`" for token in it.avoid))
-        if extra:
-            line += " (" + "; ".join(extra) + ")"
-        lines.append(f"- {line}")
-
-        if it.examples:
-            examples = [ex.strip() for ex in it.examples if ex.strip()]
-            if examples:
-                lines.append("  - examples:")
-                lines.extend(f'    - "{ex}"' for ex in examples)
-    return lines
-
-
-def _render_layer(label: str, layer: "GoalLayer") -> list[str]:
-    chunks: list[str] = [f"\n{label}:"]
-    if layer.summary:
-        chunks.append(textwrap.fill(layer.summary, width=96))
-    chunks.extend(_render_items(layer.items))
-    return chunks
+def _render_goal_line(goal: "Goal") -> str:
+    """Render a single goal as a bullet line."""
+    parts: list[str] = []
+    if goal.name:
+        parts.append(goal.name)
+    parts.append(goal.text)
+    return "- " + " - ".join(parts)
 
 
 def render_goal_prompt(spec: "GoalSpec") -> str:
-    """Render a GoalSpec into a compact instruction block."""
+    """Render a GoalSpec into a compact instruction block.
+
+    Goals are grouped by category when categories are present.
+    Uncategorized goals appear under a general heading.
+    """
+    active = [g for g in spec.goals if g.weight > 0]
+    if not active:
+        return ""
+
     chunks: list[str] = ["Query optimization goals:"]
 
-    if spec.components.summary or spec.components.items:
-        chunks.extend(_render_layer(_FOCUS_LABELS["components"], spec.components))
-    if spec.trajectories.summary or spec.trajectories.items:
-        chunks.extend(_render_layer(_FOCUS_LABELS["trajectories"], spec.trajectories))
-    if spec.outcomes.summary or spec.outcomes.items:
-        chunks.extend(_render_layer(_FOCUS_LABELS["outcomes"], spec.outcomes))
+    # Separate categorized from uncategorized
+    categorized = [g for g in active if g.category]
+    uncategorized = [g for g in active if not g.category]
+
+    if categorized:
+        # Group by category, preserving input order within each group
+        for category, goals in groupby(
+            sorted(categorized, key=lambda g: g.category), key=lambda g: g.category
+        ):
+            label = category.capitalize()
+            chunks.append(f"\n{label}:")
+            for goal in goals:
+                chunks.append(_render_goal_line(goal))
+
+    if uncategorized:
+        if categorized:
+            chunks.append("\nGeneral:")
+        for goal in uncategorized:
+            chunks.append(_render_goal_line(goal))
 
     return "\n".join(chunks).strip() + "\n"
 
 
-def render_focused_goal_prompt(
-    spec: "GoalSpec", *, focus_area: "GoalFocusArea"
-) -> str:
-    """Render a single goal layer (components/trajectories/outcomes)."""
-    label = _FOCUS_LABELS.get(str(focus_area), "Goals")
-    layer = getattr(spec, str(focus_area))
+def render_focused_goal_prompt(goal: "Goal") -> str:
+    """Render a single Goal as the focus for a query."""
+    parts: list[str] = []
 
-    chunks: list[str] = [
-        f"Query optimization goals (focus area: {label}):",
-        f"\n{label}:",
-    ]
-    if layer.summary:
-        chunks.append(textwrap.fill(layer.summary, width=96))
-    chunks.extend(_render_items(layer.items))
-    return "\n".join(chunks).strip() + "\n"
+    label = goal.category.capitalize() if goal.category else "Goal"
+    focus_name = goal.name or goal.text[:40]
+    parts.append(f"Query optimization goals (focus: {focus_name}):")
+
+    if goal.category:
+        parts.append(f"\n{label}:")
+
+    parts.append(_render_goal_line(goal))
+
+    return "\n".join(parts).strip() + "\n"

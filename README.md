@@ -97,30 +97,28 @@ combinations when the space is large.
 - To get reproducible results, set `seed=...`.
 - Changing the seed gives you a different randomized subset.
 
-## Goal-guided query optimization (Components / Trajectories / Outcomes)
+## Goal-guided query optimization
 
-You can guide query generation using the three-layer framework by providing a
-`GoalSpec` (structured) or free-form text (which is normalized into a `GoalSpec`).
+You can guide query generation by providing a `GoalSpec` (structured) or
+free-form text (which is parsed into a `GoalSpec`).
 
-Goals are used to **condition queries per run**, so you can iterate quickly.
-If you provide `GoalItem.examples`, they are included in the internal goal prompt passed to the query generator.
+Goals are flat and optionally categorized using the CTO framework
+(Components / Trajectories / Outcomes) or any custom categories.
 
-When you pass **free-form text** for `goals`, Evaluateur will ask an LLM to convert it into a structured
-`GoalSpec`. For best results, include concrete example user questions and any measurable acceptance criteria
-(e.g. "cite policy section," "ask a clarifying question if payer is missing," "return a checklist"). This helps
-produce low-overlap goals across components vs trajectories vs outcomes.
+Structured text (numbered/bulleted lists) is parsed without an LLM call.
+CTO section headers like `Components:` are auto-detected. Free-form text
+falls back to LLM enrichment.
 
 ### Sampling goals per query (diversity mode)
 
-By default, Evaluateur picks a single focus area
-(**components**, **trajectories**, or **outcomes**) _per generated query_.
+By default, Evaluateur picks a single goal _per generated query_.
 This helps ensure one run produces a mix of different stress-test styles.
 
 ```python
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
+from evaluateur import Evaluator, Goal, GoalSpec
 
 
 class Query(BaseModel):
@@ -133,18 +131,18 @@ class Query(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="freshness checks")]),
-        trajectories=GoalLayer(items=[GoalItem(name="conflict handling")]),
-        outcomes=GoalLayer(items=[GoalItem(name="checklist-ready")]),
-    )
+    goals = GoalSpec(goals=[
+        Goal(name="freshness checks", text="Test data currency", category="components"),
+        Goal(name="conflict handling", text="Test conflicting sources", category="trajectories"),
+        Goal(name="checklist-ready", text="Request structured output", category="outcomes"),
+    ])
 
     async for q in evaluator.run(
         seed=0,
         instructions="Make the question sound like a real user.",
         goals=goals,
     ):
-        print(q.metadata.goal_focus_area, "->", q.query)
+        print(q.metadata.goal_focus, "->", q.query)
         break
 
 
@@ -163,7 +161,7 @@ It returns two things:
 
 Evaluateur uses a context builder internally when you enable goal sampling
 (`goal_mode="sample"`) so that each generated query can focus on a
-different goal area (components vs trajectories vs outcomes).
+different goal.
 
 If you write a custom query generator, accept `context_builder` and fall back to
 the base `context` when it is not provided.
@@ -213,7 +211,7 @@ Structured goals:
 import asyncio
 from pydantic import BaseModel, Field
 
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
+from evaluateur import Evaluator, Goal, GoalSpec
 
 
 class Query(BaseModel):
@@ -226,38 +224,28 @@ class Query(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    goals = GoalSpec(
-        components=GoalLayer(
-            summary="Stress freshness, missing-document detection, and citation traceability.",
-            items=[
-                GoalItem(
-                    name="freshness checks",
-                    must_include=["effective date", "latest policy", "as of"],
-                    avoid=["undated", "last year"],
-                ),
-                GoalItem(
-                    name="grounded claims",
-                    must_include=["cite", "policy section"],
-                ),
-            ],
+    goals = GoalSpec(goals=[
+        Goal(
+            name="freshness checks",
+            text="Queries should ask about effective dates and latest policy versions",
+            category="components",
         ),
-        trajectories=GoalLayer(
-            items=[
-                GoalItem(
-                    name="conflict integration",
-                    must_include=["conflicting", "payer policy", "FDA label"],
-                )
-            ]
+        Goal(
+            name="grounded claims",
+            text="Queries should request citations and policy section references",
+            category="components",
         ),
-        outcomes=GoalLayer(
-            items=[
-                GoalItem(
-                    name="checklist-ready",
-                    must_include=["payer", "age", "diagnosis"],
-                )
-            ]
+        Goal(
+            name="conflict integration",
+            text="Test behavior when payer policy conflicts with FDA label",
+            category="trajectories",
         ),
-    )
+        Goal(
+            name="checklist-ready",
+            text="Queries should request structured lists of requirements",
+            category="outcomes",
+        ),
+    ])
 
     async for q in evaluator.run(
         goals=goals,
@@ -269,7 +257,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Free-form goals (normalized with Instructor):
+Free-form goals (parsed without LLM when structured):
 
 ```python
 import asyncio
@@ -291,9 +279,17 @@ async def main() -> None:
     i = 0
     async for q in evaluator.run(
         goals="""
-Components: prioritize freshness checks, grounded citations, and missing-source detection (don't proceed silently).
-Trajectories: include conflict handling and recovery behavior (re-try, switch tools, or escalate when evidence conflicts).
-Outcomes: produce checklist-ready outputs that are easy to review and hard to misuse.
+Components:
+- Prioritize freshness checks and grounded citations
+- Missing-source detection (don't proceed silently)
+
+Trajectories:
+- Conflict handling and recovery behavior
+- Re-try, switch tools, or escalate when evidence conflicts
+
+Outcomes:
+- Produce checklist-ready outputs
+- Easy to review and hard to misuse
 """,
     ):
         print(q.query)

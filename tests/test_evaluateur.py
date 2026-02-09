@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
-from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
+from evaluateur.goals import Goal, GoalSpec
 from evaluateur.queries.models import GeneratedQuery
 from evaluateur.tuples import CrossProductTupleGenerator
 from evaluateur.options.types import create_options_model, is_iterator_field
@@ -175,7 +175,7 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
                 )
 
     goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="force payer")]),
+        goals=[Goal(name="force payer", text="Test payer handling", category="components")],
     )
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
@@ -201,8 +201,9 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
         assert q.metadata.goal_guided is True
         assert q.metadata.goal_mode == "cycle"
         assert isinstance(q.metadata.query_goals, GoalSpec)
-        assert q.metadata.query_goals.components.items[0].name == "force payer"
-        assert q.metadata.goal_focus_area == "components"
+        assert q.metadata.query_goals.goals[0].name == "force payer"
+        assert q.metadata.goal_focus == "force payer"
+        assert q.metadata.goal_category == "components"
 
 
 async def test_evaluator_queries_includes_instructions_in_context() -> None:
@@ -235,7 +236,7 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
     assert captured[0] == "Keep it short."
 
 
-async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> None:
+async def test_evaluator_queries_goal_sampling_sets_focus_per_query() -> None:
     evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
@@ -248,9 +249,11 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="c", weight=1000.0)]),
-        trajectories=GoalLayer(items=[GoalItem(name="t", weight=1.0)]),
-        outcomes=GoalLayer(items=[GoalItem(name="o", weight=1.0)]),
+        goals=[
+            Goal(name="c", text="Component check", category="components", weight=1000.0),
+            Goal(name="t", text="Trajectory check", category="trajectories", weight=1.0),
+            Goal(name="o", text="Outcome check", category="outcomes", weight=1.0),
+        ],
     )
 
     tuples = [
@@ -273,16 +276,18 @@ async def test_evaluator_queries_goal_sampling_sets_focus_area_per_query() -> No
     assert len(results) == len(tuples)
     assert all(q.metadata.goal_mode == "sample" for q in results)
 
-    counts: dict[str, int] = {"components": 0, "trajectories": 0, "outcomes": 0}
+    # Count by goal_focus (individual goal names)
+    counts: dict[str, int] = {"c": 0, "t": 0, "o": 0}
     for q in results:
-        assert q.metadata.goal_focus_area in counts
-        counts[q.metadata.goal_focus_area] += 1
+        assert q.metadata.goal_focus in counts
+        counts[q.metadata.goal_focus] += 1
 
-    assert counts["components"] > counts["trajectories"]
-    assert counts["components"] > counts["outcomes"]
+    # Higher weight goal should be sampled more often
+    assert counts["c"] > counts["t"]
+    assert counts["c"] > counts["o"]
 
 
-async def test_evaluator_queries_cycle_mode_round_robins_focus_areas() -> None:
+async def test_evaluator_queries_cycle_mode_round_robins_goals() -> None:
     evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
@@ -295,9 +300,11 @@ async def test_evaluator_queries_cycle_mode_round_robins_focus_areas() -> None:
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="c", weight=10.0)]),
-        trajectories=GoalLayer(items=[GoalItem(name="t", weight=1.0)]),
-        outcomes=GoalLayer(items=[GoalItem(name="o", weight=1.0)]),
+        goals=[
+            Goal(name="c", text="Component check", category="components", weight=10.0),
+            Goal(name="t", text="Trajectory check", category="trajectories", weight=1.0),
+            Goal(name="o", text="Outcome check", category="outcomes", weight=1.0),
+        ],
     )
 
     tuples = [
@@ -320,12 +327,12 @@ async def test_evaluator_queries_cycle_mode_round_robins_focus_areas() -> None:
     assert all(q.metadata.goal_mode == "cycle" for q in results)
 
     # Cycle should produce: c, t, o, c, t, o, c, t, o
-    expected_areas = ["components", "trajectories", "outcomes"] * 3
-    actual_areas = [q.metadata.goal_focus_area for q in results]
-    assert actual_areas == expected_areas
+    expected_goals = ["c", "t", "o"] * 3
+    actual_goals = [q.metadata.goal_focus for q in results]
+    assert actual_goals == expected_goals
 
 
-async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> None:
+async def test_evaluator_queries_goal_sampling_excludes_disabled_goals() -> None:
     evaluator = Evaluator(Query)
 
     class DummyQueryGenerator:
@@ -338,12 +345,11 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        components=GoalLayer(items=[GoalItem(name="c", weight=10.0)]),
-        trajectories=GoalLayer(
-            summary="Prefer careful tool choice.",
-            items=[GoalItem(name="t", weight=0.0)],
-        ),
-        outcomes=GoalLayer(items=[GoalItem(name="o", weight=0.0)]),
+        goals=[
+            Goal(name="c", text="Component check", category="components", weight=10.0),
+            Goal(name="t", text="Disabled", category="trajectories", weight=0.0),
+            Goal(name="o", text="Disabled too", category="outcomes", weight=0.0),
+        ],
     )
 
     tuples = [
@@ -363,15 +369,14 @@ async def test_evaluator_queries_goal_sampling_includes_summary_only_layer() -> 
             )
         ]
 
-    counts: dict[str, int] = {}
+    counts: dict[str | None, int] = {}
     for q in results:
-        counts[q.metadata.goal_focus_area] = (
-            counts.get(q.metadata.goal_focus_area, 0) + 1
-        )
+        counts[q.metadata.goal_focus] = counts.get(q.metadata.goal_focus, 0) + 1
 
-    assert counts.get("trajectories", 0) > 0
-    assert counts.get("outcomes", 0) == 0
-    assert counts.get("components", 0) > counts.get("trajectories", 0)
+    # Only the active goal should appear
+    assert counts.get("c", 0) == 200
+    assert counts.get("t", 0) == 0
+    assert counts.get("o", 0) == 0
 
 
 async def test_run_with_options_instructions() -> None:

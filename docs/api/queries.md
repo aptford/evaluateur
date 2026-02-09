@@ -79,7 +79,7 @@ GeneratedTuple(
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `values` | `dict[str, ScalarValue]` | Dimension name → value mapping |
+| `values` | `dict[str, ScalarValue]` | Dimension name -> value mapping |
 
 **Type:** `ScalarValue = str | int | float | bool`
 
@@ -115,7 +115,8 @@ QueryMetadata(
     goal_guided: bool = False,
     query_goals: GoalSpec | None = None,
     goal_mode: GoalMode | None = None,
-    goal_focus_area: GoalFocusArea | None = None,
+    goal_focus: str | None = None,
+    goal_category: str | None = None,
     **extra_fields,  # Extra fields allowed
 )
 ```
@@ -125,9 +126,10 @@ QueryMetadata(
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `goal_guided` | `bool` | `False` | Whether goals were used |
-| `query_goals` | `GoalSpec | None` | `None` | The goal spec used |
-| `goal_mode` | `GoalMode | None` | `None` | `"sample"` or `"full"` |
-| `goal_focus_area` | `GoalFocusArea | None` | `None` | Focused layer in sample mode |
+| `query_goals` | `GoalSpec \| None` | `None` | The goal spec used |
+| `goal_mode` | `GoalMode \| None` | `None` | `"sample"`, `"cycle"`, or `"full"` |
+| `goal_focus` | `str \| None` | `None` | Name of the focused goal (sample/cycle mode) |
+| `goal_category` | `str \| None` | `None` | Category of the focused goal |
 
 Extra fields are allowed for custom metadata.
 
@@ -139,13 +141,15 @@ from evaluateur.queries import QueryMetadata
 meta = QueryMetadata(
     goal_guided=True,
     goal_mode="sample",
-    goal_focus_area="components",
+    goal_focus="freshness checks",
+    goal_category="components",
     custom_field="custom_value",  # Extra fields allowed
 )
 
-print(meta.goal_guided)  # True
-print(meta.goal_focus_area)  # "components"
-print(meta.model_dump())  # Includes custom_field
+print(meta.goal_guided)    # True
+print(meta.goal_focus)     # "freshness checks"
+print(meta.goal_category)  # "components"
+print(meta.model_dump())   # Includes custom_field
 ```
 
 ---
@@ -228,7 +232,7 @@ async def main() -> None:
 
     async for q in evaluator.run(
         tuple_count=5,
-        goals="Test edge cases",
+        goals="- Test edge cases\n- Verify citations",
     ):
         # Access query text
         print(f"Query: {q.query}")
@@ -239,8 +243,10 @@ async def main() -> None:
 
         # Access metadata
         print(f"Goal-guided: {q.metadata.goal_guided}")
-        if q.metadata.goal_focus_area:
-            print(f"Focus: {q.metadata.goal_focus_area}")
+        if q.metadata.goal_focus:
+            print(f"Focus: {q.metadata.goal_focus}")
+        if q.metadata.goal_category:
+            print(f"Category: {q.metadata.goal_category}")
 
         print("---")
 

@@ -44,15 +44,16 @@ With a context builder, each tuple gets a customized prompt:
 
 ## Built-in Use: Goal Sampling
 
-Evaluateur uses context builders internally for goal sampling. When you set `goal_mode="sample"`, a context builder selects a different goal focus area for each query:
+Evaluateur uses context builders internally for goal sampling. When you set `goal_mode="sample"`, a context builder selects a different goal for each query:
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="sample",  # Uses context builder internally
 ):
-    # Each query has different goal focus
-    print(q.metadata.goal_focus_area)  # "components", "trajectories", or "outcomes"
+    # Each query focuses on a different goal
+    print(q.metadata.goal_focus)     # e.g. "freshness checks"
+    print(q.metadata.goal_category)  # e.g. "components"
 ```
 
 ## Custom Query Generators

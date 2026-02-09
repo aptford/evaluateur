@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .config import DEFAULT_CONFIG, EvaluatorConfig
 from .evaluator import Evaluator
-from .goals import GoalItem, GoalLayer, GoalSpec
+from .goals import Goal, GoalSpec
 from .queries import QueryMode, build_query_generator
 from .queries.merge import merge_query_metadata
 from .queries.models import GeneratedQuery, GeneratedTuple
@@ -24,7 +24,6 @@ __all__ = [
     "TupleStrategy",
     "build_tuple_generator",
     # Goals
-    "GoalItem",
-    "GoalLayer",
+    "Goal",
     "GoalSpec",
 ]

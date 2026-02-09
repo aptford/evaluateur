@@ -9,45 +9,61 @@ Use `GoalSpec` for precise control over query generation.
 ### Basic Structure
 
 ```python
-from evaluateur import GoalItem, GoalLayer, GoalSpec
+from evaluateur import Goal, GoalSpec
 
-goals = GoalSpec(
-    components=GoalLayer(
-        summary="Test system internals",
-        items=[
-            GoalItem(name="data freshness"),
-            GoalItem(name="source attribution"),
-        ],
-    ),
-    trajectories=GoalLayer(
-        items=[
-            GoalItem(name="multi-step workflows"),
-        ],
-    ),
-    outcomes=GoalLayer(
-        items=[
-            GoalItem(name="actionable responses"),
-        ],
-    ),
+goals = GoalSpec(goals=[
+    Goal(name="data freshness", text="Test whether queries surface current data"),
+    Goal(name="source attribution", text="Ensure citations are requested"),
+    Goal(name="multi-step workflows", text="Cover multi-step user journeys"),
+    Goal(name="actionable responses", text="Queries should request clear next steps"),
+])
+```
+
+### Goal Options
+
+Each `Goal` supports several configuration options:
+
+```python
+Goal(
+    name="citation accuracy",             # Optional: short label
+    text="Verify sources are correctly cited",  # Required: full description
+    weight=1.5,                            # Optional: sampling weight (default 1.0)
+    category="components",                 # Optional: CTO category or custom
 )
 ```
 
-### GoalItem Options
+### Using CTO Categories
 
-Each `GoalItem` supports several configuration options:
+The CTO framework (Components / Trajectories / Outcomes) provides well-known categories:
 
 ```python
-GoalItem(
-    name="citation accuracy",           # Required: short name
-    description="Verify sources are correctly cited",  # Optional: longer description
-    weight=1.5,                          # Optional: sampling weight (default 1.0)
-    must_include=["cite", "source"],     # Optional: required terms
-    avoid=["unverified", "probably"],    # Optional: terms to avoid
-    examples=[                           # Optional: example queries
-        "Can you cite the source for that claim?",
-        "Which policy section covers this?",
-    ],
-)
+goals = GoalSpec(goals=[
+    Goal(
+        name="evidence grading",
+        text="Queries should reference evidence quality",
+        category="components",
+    ),
+    Goal(
+        name="contraindication awareness",
+        text="Test detection of drug interactions and contraindications",
+        category="components",
+    ),
+    Goal(
+        name="shared decision making",
+        text="Support patient-provider conversations about treatment options",
+        category="trajectories",
+    ),
+    Goal(
+        name="escalation paths",
+        text="Know when to refer to specialists",
+        category="trajectories",
+    ),
+    Goal(
+        name="patient-friendly language",
+        text="Responses should avoid medical jargon and use plain language",
+        category="outcomes",
+    ),
+])
 ```
 
 ### Complete Example
@@ -55,7 +71,7 @@ GoalItem(
 ```python
 import asyncio
 from pydantic import BaseModel, Field
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
+from evaluateur import Evaluator, Goal, GoalSpec
 
 
 class MedicalQuery(BaseModel):
@@ -66,56 +82,37 @@ class MedicalQuery(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(MedicalQuery)
 
-    goals = GoalSpec(
-        components=GoalLayer(
-            summary="Test clinical accuracy and data handling",
-            items=[
-                GoalItem(
-                    name="evidence grading",
-                    description="Queries should reference evidence quality",
-                    must_include=["evidence", "study", "trial"],
-                    examples=[
-                        "What's the evidence level for this treatment?",
-                        "Are there randomized trials supporting this?",
-                    ],
-                ),
-                GoalItem(
-                    name="contraindication awareness",
-                    must_include=["contraindicated", "avoid", "risk"],
-                    avoid=["always safe", "no side effects"],
-                ),
-            ],
+    goals = GoalSpec(goals=[
+        Goal(
+            name="evidence grading",
+            text="Queries should reference evidence quality and ask about study types",
+            category="components",
+            weight=2.0,
         ),
-        trajectories=GoalLayer(
-            items=[
-                GoalItem(
-                    name="shared decision making",
-                    description="Support patient-provider conversations",
-                    must_include=["options", "discuss with doctor"],
-                ),
-                GoalItem(
-                    name="escalation paths",
-                    description="Know when to refer to specialists",
-                    must_include=["specialist", "refer", "urgent"],
-                ),
-            ],
+        Goal(
+            name="contraindication awareness",
+            text="Test detection of contraindications and drug interaction risks",
+            category="components",
         ),
-        outcomes=GoalLayer(
-            items=[
-                GoalItem(
-                    name="patient-friendly language",
-                    avoid=["medical jargon", "abbreviations"],
-                    examples=[
-                        "Explain this in simple terms",
-                        "What does this mean for my daily life?",
-                    ],
-                ),
-            ],
+        Goal(
+            name="shared decision making",
+            text="Support patient-provider conversations about treatment options",
+            category="trajectories",
         ),
-    )
+        Goal(
+            name="escalation paths",
+            text="Test when to refer to specialists or flag urgent situations",
+            category="trajectories",
+        ),
+        Goal(
+            name="patient-friendly language",
+            text="Responses should use plain language and avoid abbreviations",
+            category="outcomes",
+        ),
+    ])
 
     async for q in evaluator.run(goals=goals, tuple_count=10, seed=42):
-        print(f"[{q.metadata.goal_focus_area}] {q.query}")
+        print(f"[{q.metadata.goal_focus}] {q.query}")
 
 
 asyncio.run(main())
@@ -123,7 +120,7 @@ asyncio.run(main())
 
 ## Free-Form Goals
 
-For quick prototyping, provide goals as plain text:
+For quick prototyping, provide goals as plain text. Numbered or bulleted lists are parsed directly without an LLM call:
 
 ```python
 import asyncio
@@ -139,15 +136,10 @@ async def main() -> None:
     evaluator = Evaluator(Query)
 
     goals = """
-    Components:
     - Test data freshness (queries should ask about recent updates)
     - Verify citation accuracy (references should be traceable)
-
-    Trajectories:
     - Cover multi-step research workflows
     - Include disambiguation when topics are ambiguous
-
-    Outcomes:
     - Responses should be actionable, not just informational
     - Include clear next steps or recommendations
     """
@@ -157,6 +149,26 @@ async def main() -> None:
 
 
 asyncio.run(main())
+```
+
+### CTO Headers in Text
+
+CTO section headers are auto-detected and assign categories:
+
+```python
+goals = """
+Components:
+- Test data freshness
+- Verify citation accuracy
+
+Trajectories:
+- Cover multi-step research workflows
+- Include disambiguation when topics are ambiguous
+
+Outcomes:
+- Responses should be actionable
+- Include clear next steps
+"""
 ```
 
 ### Tips for Free-Form Goals
@@ -171,20 +183,20 @@ asyncio.run(main())
     "Responses should cite specific sources and include publication dates"
     ```
 
-2. **Include examples**: Help the LLM understand what you want
+2. **Use bullet points**: Structured lists are parsed without an LLM call
+
+    ```
+    - Citation accuracy: references should be traceable
+    - Freshness: ask about the latest guidelines
+    ```
+
+3. **Use CTO headers optionally**: They assign categories automatically
 
     ```
     Components:
-    - Citation accuracy: "Which study supports this claim?"
-    - Freshness: "Is this based on the latest guidelines?"
-    ```
-
-3. **Use the three layers**: Structure helps with parsing
-
-    ```
-    Components: [internal capabilities]
-    Trajectories: [user journeys]
-    Outcomes: [output qualities]
+    - Citation accuracy
+    Trajectories:
+    - Error recovery
     ```
 
 ## Goal Weights
@@ -192,15 +204,11 @@ asyncio.run(main())
 Control sampling probability with weights:
 
 ```python
-goals = GoalSpec(
-    components=GoalLayer(
-        items=[
-            GoalItem(name="critical feature", weight=3.0),   # 3x more likely
-            GoalItem(name="nice to have", weight=0.5),       # Less common
-            GoalItem(name="temporarily disabled", weight=0),  # Excluded
-        ],
-    ),
-)
+goals = GoalSpec(goals=[
+    Goal(name="critical feature", text="...", weight=3.0),   # 3x more likely
+    Goal(name="nice to have", text="...", weight=0.5),       # Less common
+    Goal(name="temporarily disabled", text="...", weight=0), # Excluded
+])
 ```
 
 Weights only affect `goal_mode="sample"` (the default). In `goal_mode="full"`, all goals are included.
@@ -209,18 +217,31 @@ Weights only affect `goal_mode="sample"` (the default). In `goal_mode="full"`, a
 
 ### Sample Mode (Default)
 
-Picks one focus area (components, trajectories, or outcomes) per query:
+Picks one goal per query at random (weighted):
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="sample",
 ):
-    # Each query focuses on ONE layer
-    print(q.metadata.goal_focus_area)
+    # Each query focuses on ONE goal
+    print(q.metadata.goal_focus)
 ```
 
-This creates diverse test coverage across all goal types.
+This creates diverse test coverage across all goals.
+
+### Cycle Mode
+
+Rotates through goals consecutively:
+
+```python
+async for q in evaluator.run(
+    goals=goals,
+    goal_mode="cycle",
+):
+    # Goals rotate: goal[0] → goal[1] → goal[2] → ...
+    print(q.metadata.goal_focus)
+```
 
 ### Full Mode
 
@@ -246,12 +267,13 @@ async for q in evaluator.run(goals=goals):
     print(f"Query: {q.query}")
     print(f"Goal-guided: {q.metadata.goal_guided}")
     print(f"Goal mode: {q.metadata.goal_mode}")
-    print(f"Focus area: {q.metadata.goal_focus_area}")
+    print(f"Goal focus: {q.metadata.goal_focus}")
+    print(f"Goal category: {q.metadata.goal_category}")
 
     if q.metadata.query_goals:
         # Access the full GoalSpec used
         spec = q.metadata.query_goals
-        print(f"Components: {[g.name for g in spec.components.items]}")
+        print(f"Goals: {[g.name for g in spec.goals]}")
 ```
 
 ## Converting Between Formats
@@ -275,22 +297,19 @@ spec = await evaluator.parse_goals(
 )
 
 # Now use as structured goals
-print(spec.components.items)
-print(spec.trajectories.items)
-print(spec.outcomes.items)
+for goal in spec.goals:
+    print(f"{goal.name}: {goal.text} (category: {goal.category})")
 ```
 
-In most cases, you don't need to call this directly — pass a string to
+In most cases, you don't need to call this directly -- pass a string to
 `goals=` in `evaluator.run()` and it handles parsing automatically.
 
 ## Best Practices
 
-1. **Start with free-form** to explore what works, then convert to structured for production
+1. **Start with a bulleted list** to explore what works, then convert to structured for production
 
-2. **Balance the layers** - ensure each has content for diverse sampling
+2. **Use weights** to emphasize important goals and disable irrelevant ones
 
-3. **Use `must_include` sparingly** - too many constraints make generation harder
+3. **Add categories when helpful** -- they make metadata filtering easier
 
-4. **Add examples** - they significantly improve query quality
-
-5. **Review generated queries** - adjust goals based on what you see
+4. **Review generated queries** -- adjust goals based on what you see

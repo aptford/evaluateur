@@ -1,8 +1,10 @@
 # Goal-Guided Optimization
 
-Evaluateur supports shaping query generation using a three-layer goal framework: **Components**, **Trajectories**, and **Outcomes**. This helps you generate queries that stress-test specific aspects of your system.
+Evaluateur supports shaping query generation using goals. Goals are flat, flexible, and optionally categorized using the **CTO framework**: **Components**, **Trajectories**, and **Outcomes**.
 
-## The Three Layers
+## The CTO Framework (Optional)
+
+The CTO framework provides well-known categories you can assign to goals. It is the default convention but not required.
 
 ### Components
 
@@ -28,6 +30,8 @@ What **output qualities** matter? Outcomes focus on the final result:
 - Actionable recommendations (clear next steps)
 - Appropriate uncertainty (honest about limitations)
 
+You can also use your own categories or skip categories entirely.
+
 ## Using Goals
 
 ### Structured Goals with GoalSpec
@@ -35,7 +39,7 @@ What **output qualities** matter? Outcomes focus on the final result:
 For precise control, define goals using the `GoalSpec` model:
 
 ```python
-from evaluateur import Evaluator, GoalItem, GoalLayer, GoalSpec
+from evaluateur import Evaluator, Goal, GoalSpec
 from pydantic import BaseModel, Field
 
 
@@ -48,101 +52,108 @@ class Query(BaseModel):
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    goals = GoalSpec(
-        components=GoalLayer(
-            summary="Stress test freshness and citation accuracy",
-            items=[
-                GoalItem(
-                    name="freshness checks",
-                    must_include=["effective date", "latest policy"],
-                    avoid=["undated references"],
-                ),
-                GoalItem(
-                    name="grounded claims",
-                    must_include=["cite", "policy section"],
-                ),
-            ],
+    goals = GoalSpec(goals=[
+        Goal(
+            name="freshness checks",
+            text="Queries should ask about effective dates and latest policy versions",
+            category="components",
         ),
-        trajectories=GoalLayer(
-            items=[
-                GoalItem(
-                    name="conflict handling",
-                    description="Test behavior when payer policy conflicts with FDA label",
-                    must_include=["conflicting", "payer policy"],
-                ),
-            ],
+        Goal(
+            name="grounded claims",
+            text="Queries should request citations and policy section references",
+            category="components",
         ),
-        outcomes=GoalLayer(
-            items=[
-                GoalItem(
-                    name="checklist-ready",
-                    must_include=["payer", "age", "diagnosis"],
-                    examples=[
-                        "List the prior auth requirements for this procedure",
-                        "What documents do I need to submit?",
-                    ],
-                ),
-            ],
+        Goal(
+            name="conflict handling",
+            text="Test behavior when payer policy conflicts with FDA label",
+            category="trajectories",
         ),
-    )
+        Goal(
+            name="checklist-ready",
+            text="Queries should ask for structured lists of requirements",
+            category="outcomes",
+        ),
+    ])
 
     async for q in evaluator.run(goals=goals, seed=0):
-        print(f"[{q.metadata.goal_focus_area}] {q.query}")
+        print(f"[{q.metadata.goal_focus}] {q.query}")
+```
+
+### Goals Without Categories
+
+Categories are optional. You can define goals without them:
+
+```python
+goals = GoalSpec(goals=[
+    Goal(name="freshness", text="Ask about effective dates"),
+    Goal(name="conflict handling", text="Test conflicting source behavior"),
+    Goal(name="checklist output", text="Request structured lists"),
+])
 ```
 
 ### Free-Form Goals
 
-For quick iteration, provide goals as plain text:
+For quick iteration, provide goals as plain text with numbered or bulleted lists:
 
 ```python
 async for q in evaluator.run(
     goals="""
-    Components: prioritize freshness checks and citation accuracy.
-    Trajectories: include conflict handling when sources disagree.
-    Outcomes: produce checklist-ready outputs.
+    - Prioritize freshness checks and citation accuracy
+    - Include conflict handling when sources disagree
+    - Produce checklist-ready outputs
     """,
 ):
     print(q.query)
 ```
 
-Evaluateur uses an LLM to parse this into a structured `GoalSpec`.
+Evaluateur parses structured lists directly without an LLM call. CTO section headers like `Components:` are auto-detected:
 
-!!! tip "Writing Effective Free-Form Goals"
-    Include concrete examples and measurable criteria:
-    
-    - "cite policy section" (specific)
-    - "ask a clarifying question if payer is missing" (behavioral)
-    - "return a checklist of required documents" (output format)
+```python
+goals = """
+Components:
+- Freshness checks
+- Citation accuracy
+
+Trajectories:
+- Conflict handling
+
+Outcomes:
+- Checklist-ready outputs
+"""
+```
+
+For truly free-form text (no list structure), Evaluateur falls back to an LLM to parse the text into goals.
 
 ## Goal Modes
 
 ### Sample Mode (Default)
 
-In sample mode, Evaluateur picks **one focus area** per query. This ensures diversity across your generated queries:
+In sample mode, Evaluateur picks **one goal** per query. This ensures diversity across your generated queries:
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="sample",  # default
 ):
-    # Each query focuses on components, trajectories, OR outcomes
-    print(q.metadata.goal_focus_area)  # "components", "trajectories", or "outcomes"
+    # Each query focuses on one specific goal
+    print(q.metadata.goal_focus)     # e.g. "freshness checks"
+    print(q.metadata.goal_category)  # e.g. "components"
 ```
 
 ### Cycle Mode
 
-In cycle mode, Evaluateur **rotates through focus areas** consecutively, guaranteeing even coverage across all layers:
+In cycle mode, Evaluateur **rotates through goals** consecutively, guaranteeing even coverage:
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="cycle",
 ):
-    # Focus areas rotate: components → trajectories → outcomes → components → ...
-    print(q.metadata.goal_focus_area)
+    # Goals rotate: goal[0] → goal[1] → goal[2] → goal[0] → ...
+    print(q.metadata.goal_focus)
 ```
 
-Use cycle mode when you want deterministic, balanced coverage across all focus areas without randomness.
+Use cycle mode when you want deterministic, balanced coverage across all goals without randomness.
 
 ### Full Mode
 
@@ -153,7 +164,7 @@ async for q in evaluator.run(
     goals=goals,
     goal_mode="full",
 ):
-    # Every query considers all goal layers
+    # Every query considers all goals
     print(q.query)
 ```
 
@@ -164,13 +175,15 @@ Use full mode when you want every query to satisfy all constraints simultaneousl
 Control the relative importance of goals with weights:
 
 ```python
-GoalItem(
+Goal(
     name="critical check",
+    text="...",
     weight=2.0,  # Twice as likely to be sampled
 )
 
-GoalItem(
+Goal(
     name="disabled for now",
+    text="...",
     weight=0.0,  # Excluded from sampling
 )
 ```
@@ -191,8 +204,9 @@ async for q in evaluator.run(goals=goals):
     # Which goal mode was used?
     print(meta.goal_mode)  # "sample", "cycle", or "full"
 
-    # Which layer was focused (in sample/cycle mode)?
-    print(meta.goal_focus_area)  # "components", "trajectories", or "outcomes"
+    # Which goal was focused (in sample/cycle mode)?
+    print(meta.goal_focus)     # e.g. "freshness checks"
+    print(meta.goal_category)  # e.g. "components"
 
     # The full goal spec used
     if meta.query_goals:
@@ -203,10 +217,14 @@ async for q in evaluator.run(goals=goals):
 
 ### Start Simple
 
-Begin with free-form goals to explore what works:
+Begin with a bulleted list to explore what works:
 
 ```python
-goals = "Test edge cases around policy conflicts and missing data"
+goals = """
+- Test edge cases around policy conflicts
+- Check handling of missing data
+- Verify citation accuracy
+"""
 ```
 
 ### Add Structure Incrementally
@@ -214,27 +232,17 @@ goals = "Test edge cases around policy conflicts and missing data"
 As you refine, convert to structured goals for precision:
 
 ```python
-goals = GoalSpec(
-    components=GoalLayer(items=[
-        GoalItem(name="missing data handling", must_include=["if missing", "ask for"]),
-    ]),
-)
+goals = GoalSpec(goals=[
+    Goal(name="missing data", text="Test behavior when required fields are absent"),
+    Goal(name="policy conflicts", text="Test conflicting policy sources", weight=2.0),
+])
 ```
 
-### Use Examples
+### Use Categories When Helpful
 
-Include example queries in your goals to guide the LLM:
+CTO categories help organize goals and make metadata filtering easier:
 
 ```python
-GoalItem(
-    name="clarification requests",
-    examples=[
-        "Could you clarify which payer you're asking about?",
-        "I need the patient's age to answer accurately.",
-    ],
-)
+# Filter results by category
+component_queries = [q for q in results if q.metadata.goal_category == "components"]
 ```
-
-### Balance Layers
-
-Ensure all three layers have content for diverse query generation in sample mode. Empty layers are skipped during sampling.
