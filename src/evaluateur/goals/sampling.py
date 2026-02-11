@@ -11,35 +11,50 @@ import random
 from collections import deque
 from collections.abc import Mapping
 
+from evaluateur.goals.constants import CTO_CATEGORIES
 from evaluateur.goals.models import Goal, GoalFocusPlan, GoalSpec
 from evaluateur.goals.rendering import render_focused_goal_prompt
 from evaluateur.queries.context import compose_query_context
 from evaluateur.queries.models import GeneratedTuple
+
+# Lookup for canonical CTO ordering; lower rank = earlier in the cycle.
+_CTO_RANK: dict[str, int] = {cat: i for i, cat in enumerate(CTO_CATEGORIES)}
 
 
 def interleave_by_category(goals: list[Goal]) -> list[Goal]:
     """Reorder goals so consecutive entries cycle through categories.
 
     Groups goals by ``Goal.category`` (preserving insertion order within
-    each group), then round-robins across groups.  When a category is
-    exhausted its slot is skipped for the remaining rounds.
+    each group), then round-robins across groups.  CTO categories are
+    visited in **C-T-O order**; any other categories follow in
+    first-seen order.  When a category is exhausted its slot is skipped
+    for the remaining rounds.
 
     Returns a new list; the original is not mutated.
 
-    Example – categories ``CCCCCTTTOO`` become ``C,T,O,C,T,O,C,T,C,C``.
+    Example – categories ``COTTT`` become ``C,T,O,T,T``.
     """
     buckets: dict[str, deque[Goal]] = {}
+    insertion_order: dict[str, int] = {}
     for goal in goals:
         key = goal.category or ""
         if key not in buckets:
+            insertion_order[key] = len(insertion_order)
             buckets[key] = deque()
         buckets[key].append(goal)
 
     if len(buckets) <= 1:
         return list(goals)  # copy, no rearranging needed
 
+    # Sort categories: CTO categories in canonical order, then custom
+    # categories in first-seen order.
+    sorted_keys = sorted(
+        buckets,
+        key=lambda k: (_CTO_RANK.get(k, len(_CTO_RANK)), insertion_order[k]),
+    )
+
     result: list[Goal] = []
-    queues = list(buckets.values())
+    queues = [buckets[k] for k in sorted_keys]
     while queues:
         remaining: list[deque[Goal]] = []
         for q in queues:

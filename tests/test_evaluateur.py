@@ -390,6 +390,54 @@ async def test_evaluator_queries_cycle_mode_interleaves_categories() -> None:
     assert actual_goals == expected_goals
 
 
+async def test_evaluator_queries_cycle_mode_sorts_cto_categories() -> None:
+    """Cycle mode uses canonical C-T-O order regardless of input order."""
+    evaluator = Evaluator(Query)
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
+            async for t in tuples:
+                _, meta = context_builder(t)
+                yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
+
+    # Input order is C, O, T, T, T — not canonical CTO order
+    goals = GoalSpec(
+        goals=[
+            Goal(name="c1", text="Component 1", category="components"),
+            Goal(name="o1", text="Outcome 1", category="outcomes"),
+            Goal(name="t1", text="Trajectory 1", category="trajectories"),
+            Goal(name="t2", text="Trajectory 2", category="trajectories"),
+            Goal(name="t3", text="Trajectory 3", category="trajectories"),
+        ],
+    )
+
+    tuples = [
+        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(5)
+    ]
+
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        results = [
+            q
+            async for q in evaluator.queries(
+                tuples=tuples,
+                goals=goals,
+                goal_mode="cycle",
+            )
+        ]
+
+    assert len(results) == 5
+
+    # Despite input order COTTT, cycle should follow C-T-O order
+    expected_goals = ["c1", "t1", "o1", "t2", "t3"]
+    actual_goals = [q.metadata.goal_focus for q in results]
+    assert actual_goals == expected_goals
+
+
 async def test_evaluator_queries_cycle_mode_single_category_preserves_order() -> None:
     """When all goals share a category, cycle preserves original order."""
     evaluator = Evaluator(Query)
