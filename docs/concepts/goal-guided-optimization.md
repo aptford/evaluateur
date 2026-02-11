@@ -142,16 +142,18 @@ async for q in evaluator.run(
 
 ### Cycle Mode
 
-In cycle mode, Evaluateur **rotates through goals** consecutively, guaranteeing even coverage:
+In cycle mode, Evaluateur **interleaves goals by category** and rotates through them, guaranteeing diverse coverage across categories:
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="cycle",
 ):
-    # Goals rotate: goal[0] → goal[1] → goal[2] → goal[0] → ...
+    # Cycles through categories first, then advances within each category
     print(q.metadata.goal_focus)
 ```
+
+If your goals have categories like `CCCCCTTTOO` (5 components, 3 trajectories, 2 outcomes), the cycle produces `C, T, O, C, T, O, C, T, C, C` rather than exhausting one category before starting the next. When all goals share a single category (or have no category), the original order is preserved.
 
 Use cycle mode when you want deterministic, balanced coverage across all goals without randomness.
 

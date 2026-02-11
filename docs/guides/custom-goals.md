@@ -232,16 +232,18 @@ This creates diverse test coverage across all goals.
 
 ### Cycle Mode
 
-Rotates through goals consecutively:
+Interleaves goals by category and rotates through them for diverse coverage:
 
 ```python
 async for q in evaluator.run(
     goals=goals,
     goal_mode="cycle",
 ):
-    # Goals rotate: goal[0] → goal[1] → goal[2] → ...
+    # Cycles through categories first, then advances within each
     print(q.metadata.goal_focus)
 ```
+
+Goals with categories `CCCCCTTTOO` cycle as `C, T, O, C, T, O, C, T, C, C`. When all goals share a single category, the original order is preserved.
 
 ### Full Mode
 

@@ -1,19 +1,53 @@
 """Goal sampling mechanisms.
 
-Provides weighted random sampling and round-robin cycling over
-individual Goals (not CTO layers).
+Provides weighted random sampling and category-interleaved round-robin
+cycling over individual Goals (not CTO layers).
 """
 
 from __future__ import annotations
 
 import math
 import random
+from collections import deque
 from collections.abc import Mapping
 
 from evaluateur.goals.models import Goal, GoalFocusPlan, GoalSpec
 from evaluateur.goals.rendering import render_focused_goal_prompt
 from evaluateur.queries.context import compose_query_context
 from evaluateur.queries.models import GeneratedTuple
+
+
+def interleave_by_category(goals: list[Goal]) -> list[Goal]:
+    """Reorder goals so consecutive entries cycle through categories.
+
+    Groups goals by ``Goal.category`` (preserving insertion order within
+    each group), then round-robins across groups.  When a category is
+    exhausted its slot is skipped for the remaining rounds.
+
+    Returns a new list; the original is not mutated.
+
+    Example – categories ``CCCCCTTTOO`` become ``C,T,O,C,T,O,C,T,C,C``.
+    """
+    buckets: dict[str, deque[Goal]] = {}
+    for goal in goals:
+        key = goal.category or ""
+        if key not in buckets:
+            buckets[key] = deque()
+        buckets[key].append(goal)
+
+    if len(buckets) <= 1:
+        return list(goals)  # copy, no rearranging needed
+
+    result: list[Goal] = []
+    queues = list(buckets.values())
+    while queues:
+        remaining: list[deque[Goal]] = []
+        for q in queues:
+            result.append(q.popleft())
+            if q:
+                remaining.append(q)
+        queues = remaining
+    return result
 
 
 class WeightedSampler:
@@ -91,8 +125,9 @@ class RoundRobinContextBuilder:
     """Per-tuple context builder that cycles through individual goals.
 
     Unlike GoalSamplingContextBuilder which randomly samples a goal,
-    this builder walks through goals in order, wrapping around when
-    all goals have been used.
+    this builder interleaves goals by category so that consecutive
+    calls cycle through different categories before repeating one.
+    When all goals have been visited it wraps around.
     """
 
     def __init__(
@@ -104,7 +139,7 @@ class RoundRobinContextBuilder:
     ) -> None:
         self._base_context = base_context or ""
         self._goal_spec = goal_spec
-        self._choices = focus_plan.choices
+        self._choices = interleave_by_category(focus_plan.choices)
         if not self._choices:
             raise ValueError("RoundRobinContextBuilder requires at least one choice")
         self._index = 0

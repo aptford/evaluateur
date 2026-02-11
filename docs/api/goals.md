@@ -177,7 +177,7 @@ GoalMode = Literal["full", "sample", "cycle"]
 | Mode | Behavior |
 |------|----------|
 | `"sample"` | Pick one goal per query at random (weighted) |
-| `"cycle"` | Rotate through goals consecutively (even coverage) |
+| `"cycle"` | Interleave goals by category and rotate (even, diverse coverage) |
 | `"full"` | Include all goals in every query |
 
 ---
