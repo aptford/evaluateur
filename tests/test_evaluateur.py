@@ -7,8 +7,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import BaseModel, Field
 
+from unittest.mock import MagicMock
+
 from evaluateur import Evaluator, GeneratedTuple, TupleStrategy
+from evaluateur.client import LLMClient
+from evaluateur.config import EvaluatorConfig
 from evaluateur.goals import Goal, GoalSpec
+from evaluateur.options import OptionsGenerator
 from evaluateur.queries.models import GeneratedQuery
 from evaluateur.tuples import CrossProductTupleGenerator
 from evaluateur.options.types import create_options_model, is_iterator_field
@@ -176,7 +181,9 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
                 )
 
     goals = GoalSpec(
-        goals=[Goal(name="force payer", text="Test payer handling", category="components")],
+        goals=[
+            Goal(name="force payer", text="Test payer handling", category="components")
+        ],
     )
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
@@ -257,7 +264,9 @@ async def test_evaluator_queries_instructions_included_with_goals() -> None:
                 yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
 
     goals = GoalSpec(
-        goals=[Goal(name="freshness", text="Test date handling", category="components")],
+        goals=[
+            Goal(name="freshness", text="Test date handling", category="components")
+        ],
     )
 
     t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
@@ -299,8 +308,12 @@ async def test_evaluator_queries_goal_sampling_sets_focus_per_query() -> None:
 
     goals = GoalSpec(
         goals=[
-            Goal(name="c", text="Component check", category="components", weight=1000.0),
-            Goal(name="t", text="Trajectory check", category="trajectories", weight=1.0),
+            Goal(
+                name="c", text="Component check", category="components", weight=1000.0
+            ),
+            Goal(
+                name="t", text="Trajectory check", category="trajectories", weight=1.0
+            ),
             Goal(name="o", text="Outcome check", category="outcomes", weight=1.0),
         ],
     )
@@ -351,7 +364,9 @@ async def test_evaluator_queries_cycle_mode_round_robins_goals() -> None:
     goals = GoalSpec(
         goals=[
             Goal(name="c", text="Component check", category="components", weight=10.0),
-            Goal(name="t", text="Trajectory check", category="trajectories", weight=1.0),
+            Goal(
+                name="t", text="Trajectory check", category="trajectories", weight=1.0
+            ),
             Goal(name="o", text="Outcome check", category="outcomes", weight=1.0),
         ],
     )
@@ -429,9 +444,14 @@ async def test_evaluator_queries_cycle_mode_interleaves_categories() -> None:
 
     # CCCCCTTTOO interleaved → c1,t1,o1, c2,t2,o2, c3,t3, c4, c5
     expected_goals = [
-        "c1", "t1", "o1",
-        "c2", "t2", "o2",
-        "c3", "t3",
+        "c1",
+        "t1",
+        "o1",
+        "c2",
+        "t2",
+        "o2",
+        "c3",
+        "t3",
         "c4",
         "c5",
     ]
@@ -624,6 +644,201 @@ async def test_run_with_options_instructions() -> None:
             ]
 
     assert captured["instructions"] == "Focus on US payers."
+
+
+async def test_config_instructions_used_by_options() -> None:
+    """Config-level instructions are used by options() when none are passed."""
+    config = EvaluatorConfig(instructions="Config-level hint.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    fake_result = MagicMock()
+
+    async def _fake_generate(self, model, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
+        captured["instructions"] = instructions
+        return fake_result
+
+    with patch.object(OptionsGenerator, "generate_options", _fake_generate):
+        await evaluator.options()
+
+    assert captured["instructions"] == "Config-level hint."
+
+
+async def test_config_instructions_overridden_by_method_options() -> None:
+    """Method-level instructions override config-level in options()."""
+    config = EvaluatorConfig(instructions="Config default.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    fake_result = MagicMock()
+
+    async def _fake_generate(self, model, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
+        captured["instructions"] = instructions
+        return fake_result
+
+    with patch.object(OptionsGenerator, "generate_options", _fake_generate):
+        await evaluator.options(instructions="Override!")
+
+    assert captured["instructions"] == "Override!"
+
+
+async def test_config_instructions_used_by_tuples() -> None:
+    """Config-level instructions are used by tuples() when none are passed."""
+    config = EvaluatorConfig(instructions="Tuple config hint.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    from evaluateur.tuples.strategies.ai import AITupleGenerator as _AI
+
+    async def _fake_gen(self, options, count, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
+        captured["instructions"] = instructions
+        yield GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    opts = SimpleOptions()
+    with patch.object(_AI, "generate", _fake_gen):
+        _ = [
+            t async for t in evaluator.tuples(opts, strategy=TupleStrategy.AI, count=2)
+        ]
+
+    assert captured["instructions"] == "Tuple config hint."
+
+
+async def test_config_instructions_overridden_by_method_tuples() -> None:
+    """Method-level instructions override config-level in tuples()."""
+    config = EvaluatorConfig(instructions="Tuple config default.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: dict[str, str | None] = {"instructions": None}
+
+    from evaluateur.tuples.strategies.ai import AITupleGenerator as _AI
+
+    async def _fake_gen(self, options, count, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
+        captured["instructions"] = instructions
+        yield GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    opts = SimpleOptions()
+    with patch.object(_AI, "generate", _fake_gen):
+        _ = [
+            t
+            async for t in evaluator.tuples(
+                opts,
+                strategy=TupleStrategy.AI,
+                count=2,
+                instructions="Tuple override!",
+            )
+        ]
+
+    assert captured["instructions"] == "Tuple override!"
+
+
+async def test_config_instructions_used_by_queries() -> None:
+    """Config-level instructions flow into queries() context."""
+    config = EvaluatorConfig(instructions="Query config hint.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: list[str] = []
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            captured.append(context)
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        _ = [q async for q in evaluator.queries(tuples=[t1])]
+
+    assert len(captured) == 1
+    assert "<instructions>" in captured[0]
+    assert "Query config hint." in captured[0]
+
+
+async def test_config_instructions_overridden_by_method_queries() -> None:
+    """Method-level instructions override config-level in queries()."""
+    config = EvaluatorConfig(instructions="Query config default.")
+    evaluator = Evaluator(Query, config=config)
+
+    captured: list[str] = []
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            captured.append(context)
+            async for t in tuples:
+                yield GeneratedQuery(query="x", source_tuple=t)
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        _ = [
+            q
+            async for q in evaluator.queries(
+                tuples=[t1], instructions="Query override!"
+            )
+        ]
+
+    assert len(captured) == 1
+    assert "Query override!" in captured[0]
+    assert "Query config default." not in captured[0]
+
+
+def _make_mock_llm_client(provider: str = "openai") -> LLMClient:
+    """Create a mock LLM client that returns a minimal options response."""
+    mock_instructor = MagicMock()
+    mock_result = MagicMock()
+    mock_result.model_dump.return_value = {
+        "payer": ["Cigna"],
+        "age": ["adult"],
+        "complexity": ["simple"],
+        "geography": ["CA"],
+    }
+    mock_instructor.chat.completions.create = AsyncMock(return_value=mock_result)
+    return LLMClient(
+        instructor_client=mock_instructor,
+        model_name="test-model",
+        provider=provider,
+    )
+
+
+async def test_options_generator_instructions_reach_system_message() -> None:
+    """Instructions passed to OptionsGenerator appear in the LLM system message."""
+    client = _make_mock_llm_client()
+    gen = OptionsGenerator(client)
+
+    await gen.generate_options(
+        Query, instructions="Focus on US payers.", count_per_field=1
+    )
+
+    call_kwargs = client.instructor_client.chat.completions.create.call_args[1]
+    messages = call_kwargs["messages"]
+    system_msg = messages[0]["content"]
+    assert "<instructions>" in system_msg
+    assert "Focus on US payers." in system_msg
+    assert "</instructions>" in system_msg
+
+
+async def test_options_generator_no_instructions_tag_when_none() -> None:
+    """No <instructions> tag appears in the system message when instructions are None."""
+    client = _make_mock_llm_client()
+    gen = OptionsGenerator(client)
+
+    await gen.generate_options(Query, count_per_field=1)
+
+    call_kwargs = client.instructor_client.chat.completions.create.call_args[1]
+    messages = call_kwargs["messages"]
+    system_msg = messages[0]["content"]
+    assert "<instructions>" not in system_msg
 
 
 @pytest.mark.env

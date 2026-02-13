@@ -69,6 +69,7 @@ evaluator = Evaluator(Query, client=inst, model_name="gpt-4o")
 
 # Custom config with different defaults
 config = EvaluatorConfig(
+    instructions="Focus on US healthcare scenarios.",
     tuples_count=50,
     options_count_per_field=10,
     goal_mode="full",
@@ -89,6 +90,7 @@ print(DEFAULT_CONFIG.options_count_per_field)  # 5
 
 # Create custom config
 config = EvaluatorConfig(
+    instructions="Focus on edge cases in US healthcare.",
     options_count_per_field=10,
     tuples_count=50,
     tuples_seed=42,
@@ -102,6 +104,7 @@ config = EvaluatorConfig(
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `instructions` | `str | None` | `None` | Default instructions shared across options, tuples, and queries. Method-level `instructions` override this value. |
 | `options_count_per_field` | `int` | `5` | Default options per field |
 | `tuples_count` | `int` | `20` | Default number of tuples |
 | `tuples_seed` | `int` | `0` | Default random seed |
@@ -128,8 +131,8 @@ async def options(
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `instructions` | `str | None` | `None` | Instructions for option generation |
-| `count_per_field` | `int | None` | config | Number of options per scalar field (defaults to config value) |
+| `instructions` | `str | None` | config | Instructions for option generation (defaults to config) |
+| `count_per_field` | `int | None` | config | Number of options per scalar field (defaults to config) |
 
 **Returns:** A dynamically created Pydantic model instance where each scalar field is converted to a list of options.
 
@@ -175,7 +178,7 @@ async def tuples(
 | `strategy` | `TupleStrategy | None` | config | Tuple generation strategy (defaults to config) |
 | `count` | `int | None` | config | Number of tuples to generate (defaults to config) |
 | `seed` | `int | None` | config | Random seed for sampling (defaults to config) |
-| `instructions` | `str | None` | `None` | Instructions for LLM-based strategies |
+| `instructions` | `str | None` | config | Instructions for LLM-based strategies (defaults to config) |
 
 **Yields:** `GeneratedTuple` objects containing dimension value combinations.
 
@@ -215,7 +218,7 @@ async def queries(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `tuples` | `Sequence | AsyncIterator` | - | Tuples to convert to queries |
-| `instructions` | `str | None` | `None` | Query generation instructions |
+| `instructions` | `str | None` | config | Query generation instructions (defaults to config) |
 | `goal_mode` | `GoalMode | None` | config | Goal guidance mode (defaults to config) |
 | `query_mode` | `QueryMode | None` | config | Query generator to use (defaults to config) |
 | `seed` | `int | None` | config | Seed for goal sampling (defaults to config) |
@@ -263,7 +266,7 @@ async def run(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `options` | `BaseModel | None` | `None` | Pre-generated options (skips generation if provided) |
-| `instructions` | `str | None` | `None` | Shared instructions for all stages |
+| `instructions` | `str | None` | config | Shared instructions for all stages (defaults to config) |
 | `count_per_field` | `int | None` | config | Options per field (defaults to config) |
 | `tuple_strategy` | `TupleStrategy | None` | config | Tuple generation strategy (defaults to config) |
 | `tuple_count` | `int | None` | config | Number of tuples (defaults to config) |

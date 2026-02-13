@@ -24,6 +24,8 @@ class EvaluatorConfig:
     or by creating a custom config instance.
 
     Attributes:
+        instructions: Default instructions shared across options, tuples, and
+            queries.  Method-level ``instructions`` override this value.
         options_count_per_field: Default number of options to generate per field.
         tuples_count: Default number of tuples to generate.
         tuples_seed: Default random seed for tuple sampling.
@@ -33,6 +35,7 @@ class EvaluatorConfig:
         query_mode: Default query generator mode.
     """
 
+    instructions: str | None = None
     options_count_per_field: int = 5
     tuples_count: int = 20
     tuples_seed: int = 0

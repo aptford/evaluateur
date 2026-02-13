@@ -129,6 +129,41 @@ async def test_ai_generator_uses_default_temperature(mock_client: LLMClient) -> 
     assert call_kwargs["temperature"] == 0.5
 
 
+@pytest.mark.asyncio
+async def test_ai_generator_instructions_reach_system_message(mock_client: LLMClient) -> None:
+    """Test that instructions are included in the LLM system message."""
+    gen = AITupleGenerator(mock_client)
+    opts = SimpleOptions()
+
+    _ = [
+        t
+        async for t in gen.generate(
+            opts, count=2, seed=1, instructions="Focus on edge cases."
+        )
+    ]
+
+    call_kwargs = mock_client.instructor_client.chat.completions.create.call_args[1]
+    messages = call_kwargs["messages"]
+    system_msg = messages[0]["content"]
+    assert "<instructions>" in system_msg
+    assert "Focus on edge cases." in system_msg
+    assert "</instructions>" in system_msg
+
+
+@pytest.mark.asyncio
+async def test_ai_generator_no_instructions_tag_when_none(mock_client: LLMClient) -> None:
+    """Test that no <instructions> tag appears when instructions are None."""
+    gen = AITupleGenerator(mock_client)
+    opts = SimpleOptions()
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=1)]
+
+    call_kwargs = mock_client.instructor_client.chat.completions.create.call_args[1]
+    messages = call_kwargs["messages"]
+    system_msg = messages[0]["content"]
+    assert "<instructions>" not in system_msg
+
+
 # Integration tests that require real LLM API access
 @pytest.mark.env
 @pytest.mark.skipif(

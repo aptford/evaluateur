@@ -122,8 +122,17 @@ class Evaluator:
         Every simple field on the input model is turned into a sequence of
         options. Iterator fields (lists, tuples, etc.) are preserved.
 
-        Parameters default to config values if not provided.
+        Parameters
+        ----------
+        instructions
+            Additional instructions for the LLM. Defaults to
+            ``config.instructions`` when not provided.
+        count_per_field
+            Number of options to generate per field. Defaults to config value.
         """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
         effective_count = (
             count_per_field
             if count_per_field is not None
@@ -137,7 +146,7 @@ class Evaluator:
         options_generator = OptionsGenerator(self._client)
         result = await options_generator.generate_options(
             self.model,
-            instructions=instructions,
+            instructions=effective_instructions,
             count_per_field=effective_count,
         )
         log.debug("Generated options: %s", result)
@@ -184,8 +193,12 @@ class Evaluator:
             more consistent outputs; higher values produce more diverse outputs.
             Defaults to config value (0.5).
         instructions
-            Optional additional instructions forwarded to tuple generators that support them.
+            Additional instructions forwarded to tuple generators that support
+            them. Defaults to ``config.instructions`` when not provided.
         """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
         effective_strategy = (
             strategy if strategy is not None else self.config.get_tuple_strategy()
         )
@@ -211,7 +224,7 @@ class Evaluator:
             effective_count,
             seed=effective_seed,
             temperature=effective_temperature,
-            instructions=instructions,
+            instructions=effective_instructions,
         ):
             generated_count += 1
             yield t
@@ -235,7 +248,8 @@ class Evaluator:
         tuples
             Sequence or async stream of tuples to turn into queries.
         instructions
-            Optional instructions for query generation.
+            Instructions for query generation. Defaults to
+            ``config.instructions`` when not provided.
         goal_mode
             Goal guidance mode ("sample", "cycle", or "full"). Defaults to config.
         query_mode
@@ -245,6 +259,9 @@ class Evaluator:
         goals
             Goal specification for guided query generation.
         """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
         effective_goal_mode = (
             goal_mode if goal_mode is not None else self.config.get_goal_mode()
         )
@@ -262,7 +279,7 @@ class Evaluator:
             client=self._client,
             goals=goals,
             goal_mode=effective_goal_mode,
-            instructions=instructions,
+            instructions=effective_instructions,
             seed=effective_seed,
         )
 
@@ -303,7 +320,8 @@ class Evaluator:
             Pre-generated options model instance. If not provided, options
             will be generated using ``instructions`` and ``count_per_field``.
         instructions
-            Optional instructions shared across options, tuples, and queries.
+            Instructions shared across options, tuples, and queries.
+            Defaults to ``config.instructions`` when not provided.
         count_per_field
             Number of options to generate per field. Defaults to config.
         tuple_strategy
@@ -319,9 +337,12 @@ class Evaluator:
         goals
             Goal specification for guided query generation.
         """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
         options_instance = await self._ensure_options(
             options,
-            instructions=instructions,
+            instructions=effective_instructions,
             count_per_field=count_per_field,
         )
         tuple_iter = self.tuples(
@@ -329,11 +350,11 @@ class Evaluator:
             strategy=tuple_strategy,
             count=tuple_count,
             seed=seed,
-            instructions=instructions,
+            instructions=effective_instructions,
         )
         async for q in self.queries(
             tuples=tuple_iter,
-            instructions=instructions,
+            instructions=effective_instructions,
             goal_mode=goal_mode,
             query_mode=query_mode,
             seed=seed,
