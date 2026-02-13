@@ -36,6 +36,9 @@ docs = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "env: marks tests that require environment credentials (skipped unless --include-env is passed)",
+]
 
 [project.urls]
 homepage = "https://github.com/aptford/evaluateur"

@@ -130,6 +130,7 @@ async def test_ai_generator_uses_default_temperature(mock_client: LLMClient) -> 
 
 
 # Integration tests that require real LLM API access
+@pytest.mark.env
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
     reason="Requires LLM API credentials",
@@ -159,6 +160,7 @@ async def test_ai_tuples_different_seeds_produce_different_results(
     ), "Different seeds should produce different results"
 
 
+@pytest.mark.env
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
     reason="Requires OpenAI API for seed reproducibility",
@@ -187,6 +189,7 @@ async def test_ai_tuples_same_seed_reproducibility_openai() -> None:
     ), f"Expected >=60% overlap with same seed, got {overlap_pct:.1f}%"
 
 
+@pytest.mark.env
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
     reason="Requires LLM API credentials",

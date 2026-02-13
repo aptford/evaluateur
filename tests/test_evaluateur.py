@@ -578,6 +578,7 @@ async def test_run_with_options_instructions() -> None:
     assert captured["instructions"] == "Focus on US payers."
 
 
+@pytest.mark.env
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
     reason="Requires LLM API credentials",
@@ -624,6 +625,7 @@ async def test_evaluator_tuples_respects_seed_and_temperature() -> None:
     )
 
 
+@pytest.mark.env
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
     reason="Requires LLM API credentials",
