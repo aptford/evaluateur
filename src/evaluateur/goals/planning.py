@@ -118,7 +118,7 @@ def _build_full_plan(
     if goal_spec is not None:
         goal_prompt = goal_spec.render_prompt()
 
-    context = compose_query_context(instructions or "", goal_prompt=goal_prompt)
+    context = compose_query_context(instructions=instructions, goal_prompt=goal_prompt)
     return GoalGuidancePlan(
         goal_spec=goal_spec,
         run_metadata=run_metadata,

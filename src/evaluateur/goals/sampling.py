@@ -127,7 +127,7 @@ class GoalSamplingContextBuilder:
         _ = t
         goal = self._sampler.sample()
         focus_prompt = render_focused_goal_prompt(goal)
-        ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
+        ctx = compose_query_context(instructions=self._base_context, goal_prompt=focus_prompt)
         meta: dict[str, object] = {}
         if goal.name:
             meta["goal_focus"] = goal.name
@@ -164,7 +164,7 @@ class RoundRobinContextBuilder:
         goal = self._choices[self._index % len(self._choices)]
         self._index += 1
         focus_prompt = render_focused_goal_prompt(goal)
-        ctx = compose_query_context(self._base_context, goal_prompt=focus_prompt)
+        ctx = compose_query_context(instructions=self._base_context, goal_prompt=focus_prompt)
         meta: dict[str, object] = {}
         if goal.name:
             meta["goal_focus"] = goal.name

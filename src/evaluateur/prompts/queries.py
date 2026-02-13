@@ -24,6 +24,10 @@ QUERY_SYSTEM_TEMPLATE = (
     "- Express ALL tuple dimension values as concrete constraints.\n"
     "- Be specific, but keep it as short as possible while satisfying the constraints.\n"
     '- Do not mention "tuple", "dimensions", or the names of these instructions.\n\n'
+    "User instructions:\n"
+    "- When <instructions> tags appear in the context, they contain "
+    "domain constraints and preferences that shape query generation.\n"
+    "- Always respect these instructions alongside goals and tuple dimensions.\n\n"
     "Goal-guided generation:\n"
     "- When evaluation goals appear in <evaluation_goals> or <evaluation_goal> tags, "
     "they describe behaviors or failure modes to stress-test.\n"

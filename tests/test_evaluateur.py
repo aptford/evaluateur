@@ -234,7 +234,55 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
         ]
 
     assert len(captured) == 1
-    assert captured[0] == "Keep it short."
+    assert "<instructions>" in captured[0]
+    assert "Keep it short." in captured[0]
+    assert "</instructions>" in captured[0]
+
+
+async def test_evaluator_queries_instructions_included_with_goals() -> None:
+    """When both instructions and goals are provided, instructions appear in
+    the per-tuple context wrapped in <instructions> tags."""
+    evaluator = Evaluator(Query)
+
+    captured_contexts: list[str] = []
+
+    class DummyQueryGenerator:
+        async def generate(  # type: ignore[no-untyped-def]
+            self, tuples, context, *, context_builder=None
+        ):
+            assert context_builder is not None
+            async for t in tuples:
+                ctx, meta = context_builder(t)
+                captured_contexts.append(ctx)
+                yield GeneratedQuery(query="x", source_tuple=t, metadata=meta)
+
+    goals = GoalSpec(
+        goals=[Goal(name="freshness", text="Test date handling", category="components")],
+    )
+
+    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+
+    with patch(
+        "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
+    ):
+        _ = [
+            q
+            async for q in evaluator.queries(
+                tuples=[t1],
+                instructions="Focus on US payers only.",
+                goals=goals,
+            )
+        ]
+
+    assert len(captured_contexts) == 1
+    ctx = captured_contexts[0]
+    # Instructions must be wrapped in <instructions> tags
+    assert "<instructions>" in ctx
+    assert "Focus on US payers only." in ctx
+    assert "</instructions>" in ctx
+    # Goal must also be present
+    assert "<evaluation_goal>" in ctx
+    assert "Test date handling" in ctx
 
 
 async def test_evaluator_queries_goal_sampling_sets_focus_per_query() -> None:
