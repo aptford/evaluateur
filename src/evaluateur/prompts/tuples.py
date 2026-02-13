@@ -7,6 +7,8 @@ to build actual prompts.
 
 from __future__ import annotations
 
+import random
+
 # Template for the system message in tuple generation
 TUPLES_SYSTEM_TEMPLATE = (
     "You are generating structured synthetic test cases for an evaluation suite. "
@@ -18,8 +20,8 @@ TUPLES_USER_TEMPLATE = (
     "Using the following options per dimension, generate diverse tuples. "
     "Return around {count} combinations, preferring realistic and high-value cases.\n\n"
     "{option_lines}\n\n"
-    "This is variation {seed}. Produce a different, distinct set of tuples than "
-    "other variations would."
+    "This is variation {seed}. {variation_hint} Produce a different, distinct set of "
+    "tuples than other variations would."
 )
 
 
@@ -68,11 +70,22 @@ def format_tuples_prompts(
             f"<instructions>\n{instructions}\n</instructions>\n"
         )
 
+    # Use seed for deterministic variation in prompt hints
+    rng = random.Random(seed)
+    variation_phrases = [
+        "Focus on diverse combinations across the value space.",
+        "Prioritize realistic, commonly occurring scenarios.",
+        "Include edge cases and boundary conditions.",
+        "Balance typical cases with unusual combinations.",
+    ]
+    variation_hint = rng.choice(variation_phrases)
+
     option_lines = format_option_lines(field_names, value_lists)
     user_message = TUPLES_USER_TEMPLATE.format(
         count=count,
         option_lines=option_lines,
         seed=seed,
+        variation_hint=variation_hint,
     )
 
     return system_message, user_message

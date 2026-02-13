@@ -152,9 +152,11 @@ class CrossProductTupleGenerator:
         count: int,
         *,
         seed: int = 0,
+        temperature: float = 0.5,
         instructions: str | None = None,
     ) -> AsyncIterator[GeneratedTuple]:
         _ = instructions
+        _ = temperature  # Unused: cross-product doesn't call LLMs
         field_names, value_lists = extract_dimension_values(options)
 
         # No dimensions: exactly one empty combination.

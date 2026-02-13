@@ -27,6 +27,7 @@ class EvaluatorConfig:
         options_count_per_field: Default number of options to generate per field.
         tuples_count: Default number of tuples to generate.
         tuples_seed: Default random seed for tuple sampling.
+        tuples_temperature: Default temperature for AI tuple generation.
         tuples_strategy: Default tuple generation strategy.
         goal_mode: Default goal guidance mode.
         query_mode: Default query generator mode.
@@ -35,6 +36,7 @@ class EvaluatorConfig:
     options_count_per_field: int = 5
     tuples_count: int = 20
     tuples_seed: int = 0
+    tuples_temperature: float = 0.5
     tuples_strategy: str = "cross_product"
     goal_mode: str = "cycle"
     query_mode: str = "instructor"

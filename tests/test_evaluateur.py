@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import List
 from unittest.mock import AsyncMock, patch
 
@@ -575,3 +576,76 @@ async def test_run_with_options_instructions() -> None:
             ]
 
     assert captured["instructions"] == "Focus on US payers."
+
+
+@pytest.mark.skipif(
+    not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
+    reason="Requires LLM API credentials",
+)
+@pytest.mark.asyncio
+async def test_evaluator_tuples_respects_seed_and_temperature() -> None:
+    """Integration test: Evaluator.tuples() with AI strategy respects seed and temperature."""
+    evaluator = Evaluator(Query)
+
+    # Generate options first
+    from evaluateur.options.types import create_options_model
+
+    OptionsModel = create_options_model(Query)
+    opts = OptionsModel(
+        payer=["Cigna", "Aetna", "UnitedHealth"],
+        age=["adult", "pediatric", "geriatric"],
+        complexity=["simple", "moderate"],
+        geography=["CA", "NY"],
+    )
+
+    # Test that different seeds produce different results
+    tuples1 = [
+        t
+        async for t in evaluator.tuples(
+            opts, strategy=TupleStrategy.AI, count=3, seed=100, temperature=0.5
+        )
+    ]
+    tuples2 = [
+        t
+        async for t in evaluator.tuples(
+            opts, strategy=TupleStrategy.AI, count=3, seed=200, temperature=0.5
+        )
+    ]
+
+    # Extract values for comparison
+    values1 = [t.values for t in tuples1]
+    values2 = [t.values for t in tuples2]
+
+    assert (
+        values1 != values2
+    ), "Different seeds should produce different tuple sets"
+
+
+@pytest.mark.skipif(
+    not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"),
+    reason="Requires LLM API credentials",
+)
+@pytest.mark.asyncio
+async def test_evaluator_tuples_temperature_parameter() -> None:
+    """Test that temperature parameter is accepted by Evaluator.tuples()."""
+    evaluator = Evaluator(Query)
+
+    from evaluateur.options.types import create_options_model
+
+    OptionsModel = create_options_model(Query)
+    opts = OptionsModel(
+        payer=["Cigna", "Aetna"],
+        age=["adult", "pediatric"],
+        complexity=["simple"],
+        geography=["CA"],
+    )
+
+    # Should not raise an error
+    tuples = [
+        t
+        async for t in evaluator.tuples(
+            opts, strategy=TupleStrategy.AI, count=2, seed=1, temperature=0.8
+        )
+    ]
+
+    assert len(tuples) == 2

@@ -17,10 +17,11 @@ DEFAULT_MODEL = os.getenv("EVALUATEUR_MODEL", "openai/gpt-4.1-mini")
 
 
 class LLMClient(NamedTuple):
-    """Internal bundle: async instructor client + model name."""
+    """Internal bundle: async instructor client + model name + provider."""
 
     instructor_client: Any
     model_name: str
+    provider: str | None = None
 
 
 def resolve_client(
@@ -47,7 +48,8 @@ def resolve_client(
     Returns
     -------
     LLMClient
-        A ``(instructor_client, model_name)`` pair ready for internal use.
+        An ``(instructor_client, model_name, provider)`` bundle ready for
+        internal use.
 
     Raises
     ------
@@ -75,8 +77,9 @@ def resolve_client(
             f"Examples: 'openai/gpt-4.1-mini', 'anthropic/claude-haiku-4-5-20251001'"
         )
 
-    _, name = model_str.split("/", 1)
+    provider, name = model_str.split("/", 1)
     return LLMClient(
         instructor_client=instructor.from_provider(model_str, async_client=True),
         model_name=name,
+        provider=provider,
     )

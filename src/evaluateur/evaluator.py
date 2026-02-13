@@ -164,18 +164,36 @@ class Evaluator:
         strategy: TupleStrategy | None = None,
         count: int | None = None,
         seed: int | None = None,
+        temperature: float | None = None,
         instructions: str | None = None,
     ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples as an async iterator, yielding one at a time.
 
-        Instructions are forwarded to tuple generators that support them.
-        Parameters default to config values if not provided.
+        Parameters
+        ----------
+        options
+            The options model containing dimension values.
+        strategy
+            Tuple generation strategy. Defaults to config value.
+        count
+            Number of tuples to generate. Defaults to config value.
+        seed
+            Random seed for variation control. Defaults to config value.
+        temperature
+            LLM sampling temperature for AI strategy (0.0-2.0). Lower values produce
+            more consistent outputs; higher values produce more diverse outputs.
+            Defaults to config value (0.5).
+        instructions
+            Optional additional instructions forwarded to tuple generators that support them.
         """
         effective_strategy = (
             strategy if strategy is not None else self.config.get_tuple_strategy()
         )
         effective_count = count if count is not None else self.config.tuples_count
         effective_seed = seed if seed is not None else self.config.tuples_seed
+        effective_temperature = (
+            temperature if temperature is not None else self.config.tuples_temperature
+        )
 
         log.info(
             "Generating tuples: strategy=%s, count=%d",
@@ -189,7 +207,11 @@ class Evaluator:
         generated_count = 0
 
         async for t in tuple_gen.generate(
-            options, effective_count, seed=effective_seed, instructions=instructions
+            options,
+            effective_count,
+            seed=effective_seed,
+            temperature=effective_temperature,
+            instructions=instructions,
         ):
             generated_count += 1
             yield t
