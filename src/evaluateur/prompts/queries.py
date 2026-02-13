@@ -23,7 +23,14 @@ QUERY_SYSTEM_TEMPLATE = (
     "Query quality:\n"
     "- Express ALL tuple dimension values as concrete constraints.\n"
     "- Be specific, but keep it as short as possible while satisfying the constraints.\n"
-    '- Do not mention "tuple", "dimensions", or the names of these instructions.'
+    '- Do not mention "tuple", "dimensions", or the names of these instructions.\n\n'
+    "Goal-guided generation:\n"
+    "- When evaluation goals appear in <evaluation_goals> or <evaluation_goal> tags, "
+    "they describe behaviors or failure modes to stress-test.\n"
+    "- Craft the query so a real user would naturally trigger the described scenario. "
+    "The goal constrains the kind of question, not the literal wording.\n"
+    "- If a single goal is provided, make it the primary shaping constraint. "
+    "If multiple goals are listed, balance them while favoring higher-weighted ones."
 )
 
 # Template for the user message in query generation
@@ -35,8 +42,9 @@ QUERY_USER_TEMPLATE = (
     "Tuple (dimension values; include ALL of these in the query):\n"
     "{tuple_lines}\n\n"
     "Task:\n"
-    "- Write the single best user question that satisfies the Context constraints and reflects the tuple.\n"
-    "- Do not mention the tuple or these instructions."
+    "- Write the single best user question that satisfies the context, "
+    "reflects the tuple, and exercises any evaluation goals provided.\n"
+    "- Do not mention the tuple, goals, or these instructions."
 )
 
 

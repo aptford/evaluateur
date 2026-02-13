@@ -19,9 +19,12 @@ def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
     )
 
     prompt = spec.render_prompt()
-    assert "Query optimization goals" in prompt
+    assert "<evaluation_goals>" in prompt
+    assert "</evaluation_goals>" in prompt
     assert "Components:" in prompt
-    assert "freshness" in prompt
+    assert "- Goal: Freshness" in prompt
+    assert "%" not in prompt  # single goal: no weight annotation
+    assert "  Description: Checks effective dates" in prompt
     assert len(prompt) <= 2000
 
 
@@ -38,7 +41,8 @@ def test_goal_spec_render_prompt_with_mixed_categories() -> None:
     assert "Components:" in prompt
     assert "Trajectories:" in prompt
     assert "General:" in prompt
-    assert "uncategorized" in prompt
+    assert "- Goal: Uncategorized (33%)" in prompt
+    assert "  Description: General goal" in prompt
 
 
 def test_goal_spec_render_prompt_uncategorized_only() -> None:
@@ -50,9 +54,9 @@ def test_goal_spec_render_prompt_uncategorized_only() -> None:
     )
 
     prompt = spec.render_prompt()
-    assert "Query optimization goals" in prompt
-    assert "g1" in prompt
-    assert "g2" in prompt
+    assert "<evaluation_goals>" in prompt
+    assert "- Goal: G1 (50%)" in prompt
+    assert "- Goal: G2 (50%)" in prompt
     # No category headers when all uncategorized
     assert "Components:" not in prompt
     assert "General:" not in prompt

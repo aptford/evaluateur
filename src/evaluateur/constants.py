@@ -11,6 +11,10 @@ TAG_INSTRUCTIONS_OPEN = "<instructions>"
 TAG_INSTRUCTIONS_CLOSE = "</instructions>"
 TAG_CONTEXT_OPEN = "<context>"
 TAG_CONTEXT_CLOSE = "</context>"
+TAG_GOALS_OPEN = "<evaluation_goals>"
+TAG_GOALS_CLOSE = "</evaluation_goals>"
+TAG_GOAL_OPEN = "<evaluation_goal>"
+TAG_GOAL_CLOSE = "</evaluation_goal>"
 
 # Separator used to join context chunks
 CONTEXT_SEPARATOR = "\n\n"
