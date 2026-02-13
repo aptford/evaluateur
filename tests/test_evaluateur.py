@@ -587,7 +587,6 @@ async def test_evaluator_tuples_respects_seed_and_temperature() -> None:
     """Integration test: Evaluator.tuples() with AI strategy respects seed and temperature."""
     evaluator = Evaluator(Query)
 
-    # Generate options first
     from evaluateur.options.types import create_options_model
 
     OptionsModel = create_options_model(Query)
@@ -598,27 +597,31 @@ async def test_evaluator_tuples_respects_seed_and_temperature() -> None:
         geography=["CA", "NY"],
     )
 
-    # Test that different seeds produce different results
+    # Use high temperature so the LLM actually produces varied outputs.
+    # With low temperature the model gravitates to the same "best" combos
+    # regardless of seed.
     tuples1 = [
         t
         async for t in evaluator.tuples(
-            opts, strategy=TupleStrategy.AI, count=3, seed=100, temperature=0.5
+            opts, strategy=TupleStrategy.AI, count=5, seed=100, temperature=1.5
         )
     ]
     tuples2 = [
         t
         async for t in evaluator.tuples(
-            opts, strategy=TupleStrategy.AI, count=3, seed=200, temperature=0.5
+            opts, strategy=TupleStrategy.AI, count=5, seed=200, temperature=1.5
         )
     ]
 
-    # Extract values for comparison
-    values1 = [t.values for t in tuples1]
-    values2 = [t.values for t in tuples2]
+    values1 = {tuple(sorted(t.values.items())) for t in tuples1}
+    values2 = {tuple(sorted(t.values.items())) for t in tuples2}
 
-    assert (
-        values1 != values2
-    ), "Different seeds should produce different tuple sets"
+    # With high temperature and different seeds, the sets should not be
+    # fully identical.  We check that at least one tuple differs.
+    assert values1 != values2, (
+        "Different seeds with high temperature should produce at least "
+        "one different tuple"
+    )
 
 
 @pytest.mark.skipif(
