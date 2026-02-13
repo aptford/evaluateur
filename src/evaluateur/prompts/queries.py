@@ -7,6 +7,7 @@ to build actual prompts.
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,7 +18,7 @@ QUERY_SYSTEM_TEMPLATE = (
     "You generate ONE realistic user query to evaluate an AI system.\n\n"
     "Hard requirements:\n"
     "- The query value MUST be a single natural-language question a real user might ask.\n"
-    "- Do NOT include explanations or preambles.\n\n"
+    "- Do NOT include explanations or preambles.\n"
     "- Do not copy example queries verbatim; write a fresh query.\n\n"
     "Query quality:\n"
     "- Express ALL tuple dimension values as concrete constraints.\n"
@@ -90,7 +91,12 @@ def format_query_prompts(
     Returns:
         A tuple of (system_message, user_message).
     """
-    system_message = QUERY_SYSTEM_TEMPLATE
+    today = datetime.date.today().isoformat()
+    system_message = (
+        f"{QUERY_SYSTEM_TEMPLATE}\n\n"
+        f"Today's date is {today}. "
+        "Use this to ground any time-sensitive language in the query."
+    )
     tuple_lines = render_tuple_kv_lines(tuple)
     user_message = QUERY_USER_TEMPLATE.format(
         context=(context or "General").strip(),
