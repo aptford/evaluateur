@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import ItemsView, KeysView
+from collections.abc import ItemsView, Iterator, KeysView
 
 from pydantic import RootModel
 
@@ -43,3 +43,6 @@ class GeneratedTuple(RootModel[dict[str, ScalarValue]]):
     def __repr__(self) -> str:
         fields = ", ".join(f"{k}={v!r}" for k, v in self.root.items())
         return f"GeneratedTuple({fields})"
+
+    def __rich_repr__(self) -> Iterator[tuple[str, ScalarValue]]:
+        yield from self.root.items()
