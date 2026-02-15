@@ -46,3 +46,19 @@ def shuffle_value_lists(
         rng.shuffle(copy)
         shuffled.append(copy)
     return shuffled
+
+
+def shuffle_dimensions(
+    field_names: list[str],
+    value_lists: list[list[ScalarValue]],
+    rng: random.Random,
+) -> tuple[list[str], list[list[ScalarValue]]]:
+    """Shuffle dimension presentation order.
+
+    Returns new lists with dimensions in a random order determined by
+    *rng*.  The originals are not mutated.  This changes which dimensions
+    the LLM sees first, significantly affecting its output anchoring.
+    """
+    perm = list(range(len(field_names)))
+    rng.shuffle(perm)
+    return [field_names[i] for i in perm], [value_lists[i] for i in perm]

@@ -15,14 +15,32 @@ TUPLES_SYSTEM_TEMPLATE = (
     "Each test case is a tuple that selects exactly one value for every dimension."
 )
 
-# Template for the user message in tuple generation
+# Template for the user message in tuple generation.
+# {anchor_hint} gives the LLM a seed-specific starting point so the first
+# tuple differs across seeds.  {variation_hint} steers overall strategy.
 TUPLES_USER_TEMPLATE = (
     "Using the following options per dimension, generate diverse tuples. "
     "Return around {count} combinations, preferring realistic and high-value cases.\n\n"
     "{option_lines}\n\n"
-    "This is variation {seed}. {variation_hint} Produce a different, distinct set of "
-    "tuples than other variations would."
+    "Your first tuple MUST use these values: {anchor_hint}\n"
+    "Then generate {remaining} more diverse tuples.\n"
+    "{variation_hint}"
 )
+
+# Structurally different variation strategies.  Each phrase steers the LLM
+# toward a meaningfully different region of the output space.
+VARIATION_PHRASES = [
+    "Spread the remaining tuples across as many distinct values as possible.",
+    "Prioritize realistic, commonly occurring scenarios for the rest.",
+    "Include edge cases and boundary conditions in the remaining tuples.",
+    "Balance typical cases with unusual or rare combinations.",
+    "Favor combinations where dimension values are least correlated with each other.",
+    "Emphasize the last listed value in each dimension for at least one tuple.",
+    "Ensure no single value appears in more than half of the tuples.",
+    "Maximize coverage: each value from every dimension should appear at least once if possible.",
+    "Prefer tuples that a domain expert would find surprising but plausible.",
+    "Pair high-frequency values in one dimension with low-frequency values in others.",
+]
 
 
 def format_option_lines(
@@ -44,6 +62,22 @@ def format_option_lines(
     return "\n".join(lines)
 
 
+def _select_anchor_values(
+    field_names: list[str],
+    value_lists: list[list[object]],
+    rng: random.Random,
+) -> str:
+    """Pick one value per dimension as a seed-specific anchor.
+
+    Returns a formatted string like ``payer=Cigna, age=72, ...``.
+    """
+    parts: list[str] = []
+    for name, values in zip(field_names, value_lists):
+        chosen = rng.choice(values)
+        parts.append(f"{name}={chosen}")
+    return ", ".join(parts)
+
+
 def format_tuples_prompts(
     field_names: list[str],
     value_lists: list[list[object]],
@@ -58,7 +92,9 @@ def format_tuples_prompts(
         value_lists: List of value lists, one per dimension.
         count: Number of tuples to generate.
         instructions: Optional additional instructions for the LLM.
-        seed: Variation number included in the prompt to encourage diverse outputs.
+        seed: Variation number used to deterministically select anchor values
+            and a variation strategy, ensuring different seeds produce
+            structurally different prompts.
 
     Returns:
         A tuple of (system_message, user_message).
@@ -70,21 +106,17 @@ def format_tuples_prompts(
             f"<instructions>\n{instructions}\n</instructions>\n"
         )
 
-    # Use seed for deterministic variation in prompt hints
+    # Use seed for deterministic variation in anchor selection and hint
     rng = random.Random(seed)
-    variation_phrases = [
-        "Focus on diverse combinations across the value space.",
-        "Prioritize realistic, commonly occurring scenarios.",
-        "Include edge cases and boundary conditions.",
-        "Balance typical cases with unusual combinations.",
-    ]
-    variation_hint = rng.choice(variation_phrases)
+    anchor_hint = _select_anchor_values(field_names, value_lists, rng)
+    variation_hint = rng.choice(VARIATION_PHRASES)
 
     option_lines = format_option_lines(field_names, value_lists)
     user_message = TUPLES_USER_TEMPLATE.format(
         count=count,
+        remaining=max(count - 1, 1),
         option_lines=option_lines,
-        seed=seed,
+        anchor_hint=anchor_hint,
         variation_hint=variation_hint,
     )
 

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import os
+import random
+import re
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient, resolve_client
+from evaluateur.prompts.tuples import format_tuples_prompts
 from evaluateur.queries.models import GeneratedTuple
 from evaluateur.tuples import AITupleGenerator
+from evaluateur.tuples.options_adapter import shuffle_dimensions
 
 
 class SimpleOptions(BaseModel):
@@ -195,6 +199,123 @@ async def test_ai_generator_shuffles_options_in_prompt(mock_client: LLMClient) -
 
     assert user_msg_1 != user_msg_2, (
         "Different seeds should produce different prompts due to option shuffling"
+    )
+
+
+# ── shuffle_dimensions unit tests ──────────────────────────────────────
+
+
+def test_shuffle_dimensions_returns_new_lists() -> None:
+    """shuffle_dimensions must not mutate the originals."""
+    names = ["a", "b", "c"]
+    values: list[list] = [["1"], ["2"], ["3"]]
+    names_copy, values_copy = list(names), [list(v) for v in values]
+
+    rng = random.Random(99)
+    out_names, out_values = shuffle_dimensions(names, values, rng)
+
+    assert names == names_copy, "original field_names was mutated"
+    assert values == values_copy, "original value_lists was mutated"
+    # Output should still contain the same elements (just reordered)
+    assert sorted(out_names) == sorted(names)
+
+
+def test_shuffle_dimensions_differs_across_seeds() -> None:
+    """Different seeds should produce different dimension orderings."""
+    names = ["a", "b", "c", "d", "e"]
+    values: list[list] = [["1"], ["2"], ["3"], ["4"], ["5"]]
+
+    rng1 = random.Random(0)
+    out1, _ = shuffle_dimensions(names, values, rng1)
+
+    rng2 = random.Random(42)
+    out2, _ = shuffle_dimensions(names, values, rng2)
+
+    assert out1 != out2, "Different seeds should produce different dimension orders"
+
+
+def test_shuffle_dimensions_keeps_pairs_aligned() -> None:
+    """Field names and value lists must stay paired after shuffling."""
+    names = ["x", "y", "z"]
+    values: list[list] = [["x1", "x2"], ["y1"], ["z1", "z2", "z3"]]
+
+    rng = random.Random(7)
+    out_names, out_values = shuffle_dimensions(names, values, rng)
+
+    mapping = dict(zip(out_names, out_values))
+    assert mapping["x"] == ["x1", "x2"]
+    assert mapping["y"] == ["y1"]
+    assert mapping["z"] == ["z1", "z2", "z3"]
+
+
+# ── Prompt anchor & dimension-order tests ──────────────────────────────
+
+
+def test_prompt_contains_anchor_hint() -> None:
+    """The formatted prompt should include a 'MUST use these values' anchor."""
+    _, user_msg = format_tuples_prompts(
+        ["payer", "age"], [["Cigna", "Aetna"], ["young", "old"]], count=3, seed=0
+    )
+    assert "MUST use these values:" in user_msg
+    # Anchor should mention at least one dimension name
+    assert "payer=" in user_msg or "age=" in user_msg
+
+
+def test_prompt_anchors_differ_across_seeds() -> None:
+    """Different seeds must produce different anchor values in the prompt."""
+    field_names = ["payer", "age", "state"]
+    value_lists: list[list] = [
+        ["Cigna", "Aetna", "Humana"],
+        ["young", "middle", "old"],
+        ["CA", "NY", "TX"],
+    ]
+
+    _, msg_0 = format_tuples_prompts(field_names, value_lists, count=3, seed=0)
+    _, msg_42 = format_tuples_prompts(field_names, value_lists, count=3, seed=42)
+
+    # Extract anchor strings
+    anchor_re = re.compile(r"MUST use these values: (.+)")
+    anchor_0 = anchor_re.search(msg_0)
+    anchor_42 = anchor_re.search(msg_42)
+
+    assert anchor_0 is not None, "seed=0 prompt missing anchor"
+    assert anchor_42 is not None, "seed=42 prompt missing anchor"
+    assert anchor_0.group(1) != anchor_42.group(1), (
+        "Different seeds should select different anchor values"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ai_generator_dimension_order_differs_across_seeds(
+    mock_client: LLMClient,
+) -> None:
+    """The dimension listing order in the prompt should differ across seeds."""
+
+    class ManyDimOptions(BaseModel):
+        a: list[str] = ["a1", "a2"]
+        b: list[str] = ["b1", "b2"]
+        c: list[str] = ["c1", "c2"]
+        d: list[str] = ["d1", "d2"]
+        e: list[str] = ["e1", "e2"]
+
+    gen = AITupleGenerator(mock_client)
+    opts = ManyDimOptions()
+
+    def _extract_dimension_order(user_msg: str) -> list[str]:
+        """Parse '- name: ...' lines to get dimension order."""
+        return re.findall(r"^- (\w+):", user_msg, re.MULTILINE)
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=0)]
+    call0 = mock_client.instructor_client.chat.completions.create.call_args[1]
+    order_0 = _extract_dimension_order(call0["messages"][1]["content"])
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=42)]
+    call42 = mock_client.instructor_client.chat.completions.create.call_args[1]
+    order_42 = _extract_dimension_order(call42["messages"][1]["content"])
+
+    assert set(order_0) == set(order_42), "Same dimensions should be present"
+    assert order_0 != order_42, (
+        "Different seeds should present dimensions in different order"
     )
 
 
