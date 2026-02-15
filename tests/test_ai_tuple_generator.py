@@ -164,6 +164,40 @@ async def test_ai_generator_no_instructions_tag_when_none(mock_client: LLMClient
     assert "<instructions>" not in system_msg
 
 
+@pytest.mark.asyncio
+async def test_ai_generator_options_not_mutated(mock_client: LLMClient) -> None:
+    """Verify that the original options model is not modified after generation."""
+    gen = AITupleGenerator(mock_client)
+    opts = SimpleOptions()
+
+    payer_before = list(opts.payer)
+    age_before = list(opts.age)
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=42)]
+
+    assert opts.payer == payer_before, "options.payer was mutated"
+    assert opts.age == age_before, "options.age was mutated"
+
+
+@pytest.mark.asyncio
+async def test_ai_generator_shuffles_options_in_prompt(mock_client: LLMClient) -> None:
+    """Different seeds should present options in different order in the prompt."""
+    gen = AITupleGenerator(mock_client)
+    opts = SimpleOptions()
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=1)]
+    call1 = mock_client.instructor_client.chat.completions.create.call_args[1]
+    user_msg_1 = call1["messages"][1]["content"]
+
+    _ = [t async for t in gen.generate(opts, count=2, seed=999)]
+    call2 = mock_client.instructor_client.chat.completions.create.call_args[1]
+    user_msg_2 = call2["messages"][1]["content"]
+
+    assert user_msg_1 != user_msg_2, (
+        "Different seeds should produce different prompts due to option shuffling"
+    )
+
+
 # Integration tests that require real LLM API access
 @pytest.mark.env
 @pytest.mark.skipif(

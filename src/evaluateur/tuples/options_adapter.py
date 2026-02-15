@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable, Mapping
 from typing import cast
 
@@ -28,3 +29,20 @@ def extract_dimension_values(options: BaseModel) -> tuple[list[str], list[list[S
         value_lists.append([cast(ScalarValue, v) for v in list(value)])
 
     return field_names, value_lists
+
+
+def shuffle_value_lists(
+    value_lists: list[list[ScalarValue]],
+    rng: random.Random,
+) -> list[list[ScalarValue]]:
+    """Return a new list of shuffled copies of each value list.
+
+    Each inner list is copied and independently shuffled using the
+    provided RNG.  The original lists are never mutated.
+    """
+    shuffled: list[list[ScalarValue]] = []
+    for vl in value_lists:
+        copy = list(vl)
+        rng.shuffle(copy)
+        shuffled.append(copy)
+    return shuffled

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from collections.abc import AsyncIterator
 from typing import Any, Callable
 
@@ -11,7 +12,7 @@ from evaluateur.options.types import ScalarValue
 from evaluateur.prompts.tuples import format_tuples_prompts
 from evaluateur.queries.models import GeneratedTuple
 
-from ..options_adapter import extract_dimension_values
+from ..options_adapter import extract_dimension_values, shuffle_value_lists
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +76,13 @@ class AITupleGenerator:
         log.info("AITupleGenerator: requesting ~%d tuples from LLM", count)
 
         field_names, value_lists = extract_dimension_values(options)
+
+        # Shuffle the value lists using the seed so that different seeds
+        # present options in a different order to the LLM, producing
+        # genuinely different prompts.  Copies only — the original options
+        # model is not mutated.
+        rng = random.Random(seed)
+        value_lists = shuffle_value_lists(value_lists, rng)
 
         system_message, user_message = prompt_formatter(
             field_names,

@@ -144,3 +144,37 @@ async def test_diverse_sampling_minimum_pairwise_distance() -> None:
     # With 8 samples from 3125 combinations across 5 dimensions,
     # we should be able to maintain at least 2 differences
     assert min_dist >= 2, f"Minimum pairwise distance {min_dist} is too low"
+
+
+@pytest.mark.asyncio
+async def test_options_model_not_mutated_by_generate() -> None:
+    """Verify that the original options model is not modified after generation."""
+    gen = CrossProductTupleGenerator(client=None)
+    opts = SmallOptions()
+
+    # Snapshot values before generation.
+    a_before = list(opts.a)
+    b_before = list(opts.b)
+
+    _ = [t async for t in gen.generate(opts, count=4, seed=42)]
+
+    assert opts.a == a_before, "options.a was mutated"
+    assert opts.b == b_before, "options.b was mutated"
+
+
+@pytest.mark.asyncio
+async def test_shuffle_changes_value_order_across_seeds() -> None:
+    """Different seeds should produce different value orderings within dimensions."""
+    gen = CrossProductTupleGenerator(client=None)
+    opts = LargeOptions()
+
+    # Request full product — the order of yielded tuples should differ
+    # between seeds because value lists are shuffled.
+    out_seed0 = [t.values async for t in gen.generate(opts, count=0, seed=0)]
+    out_seed1 = [t.values async for t in gen.generate(opts, count=0, seed=1)]
+
+    # Same combinations as sets, but different ordering.
+    set0 = {tuple(sorted(d.items())) for d in out_seed0}
+    set1 = {tuple(sorted(d.items())) for d in out_seed1}
+    assert set0 == set1, "Full product should contain the same combinations"
+    assert out_seed0 != out_seed1, "Different seeds should yield different ordering"

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from evaluateur.client import LLMClient
 from evaluateur.queries.models import GeneratedTuple
 
-from ..options_adapter import extract_dimension_values
+from ..options_adapter import extract_dimension_values, shuffle_value_lists
 
 log = logging.getLogger(__name__)
 
@@ -170,6 +170,12 @@ class CrossProductTupleGenerator:
         if any(len(v) == 0 for v in value_lists):
             return
 
+        # Shuffle the value lists using the seed so that different seeds
+        # produce a fundamentally different combinatorial space mapping.
+        # This is done on copies — the original options model is not mutated.
+        rng = random.Random(seed)
+        value_lists = shuffle_value_lists(value_lists, rng)
+
         total = math.prod((len(v) for v in value_lists), start=1) if field_names else 1
         log.debug(
             "CrossProductTupleGenerator: ~%d total combinations from %d fields",
@@ -179,7 +185,6 @@ class CrossProductTupleGenerator:
 
         # If we want a strict subset, use diversity-maximizing sampling.
         if 0 < count < total:
-            rng = random.Random(seed)
             indices = self._sample_indices_diverse(
                 total=total, k=count, value_lists=value_lists, rng=rng  # type: ignore[arg-type]
             )
