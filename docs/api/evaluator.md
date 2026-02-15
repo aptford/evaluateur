@@ -191,7 +191,7 @@ async for t in evaluator.tuples(
     count=50,
     seed=42,
 ):
-    print(t.values)  # {"topic": "AI", "difficulty": "hard"}
+    print(t.model_dump())  # {"topic": "AI", "difficulty": "hard"}
 ```
 
 ---
@@ -229,7 +229,7 @@ async def queries(
 **Example:**
 
 ```python
-tuples = [GeneratedTuple(values={"topic": "AI", "difficulty": "easy"})]
+tuples = [GeneratedTuple({"topic": "AI", "difficulty": "easy"})]
 
 async for q in evaluator.queries(
     tuples=tuples,

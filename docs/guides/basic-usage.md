@@ -67,7 +67,7 @@ async def main() -> None:
         seed=123,
     ):
         tuples.append(t)
-        print(f"Tuple: {t.values}")
+        print(f"Tuple: {t.model_dump()}")
 
     # Step 3: Generate queries
     print("\nQueries:")
@@ -133,7 +133,7 @@ async def main() -> None:
     async for q in evaluator.run(tuple_count=20, seed=42):
         results.append({
             "query": q.query,
-            "tuple": q.source_tuple.values,
+            "tuple": q.source_tuple.model_dump(),
             "metadata": q.metadata.model_dump(),
         })
 
@@ -171,7 +171,7 @@ async def main() -> None:
         tuple_count=5,
         seed=42,  # Fixed seed
     ):
-        print(q.source_tuple.values)
+        print(q.source_tuple.model_dump())
 
     print("---")
 
@@ -181,7 +181,7 @@ async def main() -> None:
         tuple_count=5,
         seed=43,  # Different seed
     ):
-        print(q.source_tuple.values)
+        print(q.source_tuple.model_dump())
 
 
 asyncio.run(main())

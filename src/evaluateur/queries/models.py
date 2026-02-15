@@ -1,27 +1,48 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from collections.abc import ItemsView, KeysView
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from evaluateur.goals.models import GoalMode, GoalSpec
 from evaluateur.options.types import ScalarValue
 
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
-
-
-class GeneratedTuple(BaseModel, Generic[ModelT]):
+class GeneratedTuple(RootModel[dict[str, ScalarValue]]):
     """A concrete combination of dimension values.
 
-    The keys in ``values`` correspond to field names on the original query
-    model, and the values are the selected option for that field.
+    Dimension key-value pairs are stored directly (no wrapper).
+    Supports dict-like access::
 
-    The generic parameter ``ModelT`` represents the source model type,
-    preserving type information for downstream consumers.
+        t["payer"]              # item access
+        t.get("payer", "n/a")   # safe access with default
+        t.items()               # iterate key-value pairs
+        "payer" in t            # membership test
     """
 
-    values: dict[str, ScalarValue]
+    def __getitem__(self, key: str) -> ScalarValue:
+        return self.root[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.root
+
+    def get(self, key: str, default: ScalarValue = None) -> ScalarValue:
+        return self.root.get(key, default)
+
+    def items(self) -> ItemsView[str, ScalarValue]:
+        return self.root.items()
+
+    def keys(self) -> KeysView[str]:
+        return self.root.keys()
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+    def __bool__(self) -> bool:
+        return bool(self.root)
+
+    def __repr__(self) -> str:
+        return f"GeneratedTuple({self.root!r})"
 
 
 class QueryMetadata(BaseModel):

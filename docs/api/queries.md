@@ -45,7 +45,7 @@ from evaluateur.queries import QueryMetadata
 
 query = GeneratedQuery(
     query="What's the prior auth process for specialty procedures?",
-    source_tuple=GeneratedTuple(values={
+    source_tuple=GeneratedTuple({
         "payer": "Cigna",
         "procedure": "specialty",
     }),
@@ -53,7 +53,7 @@ query = GeneratedQuery(
 )
 
 print(query.query)
-print(query.source_tuple.values)
+print(query.source_tuple.model_dump())
 print(query.metadata.goal_guided)
 ```
 
@@ -61,7 +61,7 @@ print(query.metadata.goal_guided)
 
 ## GeneratedTuple
 
-A concrete combination of dimension values.
+A concrete combination of dimension values. Implemented as a Pydantic RootModel with dict-like access.
 
 ::: evaluateur.GeneratedTuple
     options:
@@ -70,32 +70,27 @@ A concrete combination of dimension values.
 ### Constructor
 
 ```python
-GeneratedTuple(
-    values: dict[str, ScalarValue],
-)
+GeneratedTuple(dict[str, ScalarValue])
 ```
 
-**Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `values` | `dict[str, ScalarValue]` | Dimension name -> value mapping |
-
 **Type:** `ScalarValue = str | int | float | bool`
+
+**Dict-like access:** supports `t["key"]`, `t.get("key", default)`, `t.items()`, `t.keys()`, `"key" in t`, `len(t)`, `bool(t)`.
 
 **Example:**
 
 ```python
 from evaluateur import GeneratedTuple
 
-t = GeneratedTuple(values={
+t = GeneratedTuple({
     "payer": "Cigna",
     "age_group": "adult",
     "complexity": "high",
     "geography": "Texas",
 })
 
-print(t.values["payer"])  # "Cigna"
+print(t["payer"])  # "Cigna"
+print(t.model_dump())  # full dict
 ```
 
 ---
@@ -207,7 +202,7 @@ class ContextBuilder(Protocol):
 from evaluateur.queries import GeneratedTuple
 
 def my_builder(t: GeneratedTuple) -> tuple[str, dict]:
-    context = f"Focus on {t.values.get('topic')}"
+    context = f"Focus on {t.get('topic')}"
     metadata = {"builder_used": True}
     return context, metadata
 ```
@@ -238,8 +233,8 @@ async def main() -> None:
         print(f"Query: {q.query}")
 
         # Access source tuple
-        print(f"Topic: {q.source_tuple.values['topic']}")
-        print(f"Level: {q.source_tuple.values['level']}")
+        print(f"Topic: {q.source_tuple['topic']}")
+        print(f"Level: {q.source_tuple['level']}")
 
         # Access metadata
         print(f"Goal-guided: {q.metadata.goal_guided}")

@@ -13,7 +13,7 @@ A **context builder** is a callable that takes a tuple and returns:
 from evaluateur.queries import GeneratedTuple
 
 def my_context_builder(tuple: GeneratedTuple) -> tuple[str, dict]:
-    context = f"Focus on {tuple.values.get('topic', 'general')} queries"
+    context = f"Focus on {tuple.get('topic', 'general')} queries"
     metadata = {"custom_field": "value"}
     return context, metadata
 ```
@@ -102,7 +102,7 @@ class CustomQueryGenerator:
         context: str,
     ) -> str:
         # Your query generation logic here
-        return f"Query about {tuple.values} with context: {context}"
+        return f"Query about {tuple.model_dump()} with context: {context}"
 ```
 
 ## Protocol Definition
@@ -129,7 +129,7 @@ from evaluateur.queries import GeneratedTuple
 
 
 def difficulty_context_builder(t: GeneratedTuple) -> tuple[str, dict]:
-    difficulty = t.values.get("difficulty", "medium")
+    difficulty = t.get("difficulty", "medium")
 
     if difficulty == "easy":
         context = "Generate a simple, straightforward question."
@@ -179,7 +179,7 @@ DOMAIN_CONTEXT = {
 
 
 def domain_context_builder(t: GeneratedTuple) -> tuple[str, dict]:
-    domain = t.values.get("domain", "general")
+    domain = t.get("domain", "general")
     context = DOMAIN_CONTEXT.get(domain, "Ask a clear, well-formed question.")
     return context, {"domain_applied": domain}
 ```
@@ -210,7 +210,7 @@ full_context = f"{base_instructions}\n\n{builder_context}"
 ```python
 def deterministic_builder(t: GeneratedTuple) -> tuple[str, dict]:
     # Use tuple hash for reproducible "random" selection
-    seed = hash(frozenset(t.values.items()))
+    seed = hash(frozenset(t.items()))
     random.seed(seed)
     choice = random.choice(OPTIONS)
     return choice, {"selected": choice}

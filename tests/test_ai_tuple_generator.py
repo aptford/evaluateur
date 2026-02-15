@@ -342,8 +342,8 @@ async def test_ai_tuples_different_seeds_produce_different_results(
     ]
 
     # Extract values for comparison
-    values1 = [t.values for t in tuples1]
-    values2 = [t.values for t in tuples2]
+    values1 = [t.model_dump() for t in tuples1]
+    values2 = [t.model_dump() for t in tuples2]
 
     assert (
         values1 != values2
@@ -366,8 +366,8 @@ async def test_ai_tuples_same_seed_reproducibility_openai() -> None:
     tuples2 = [t async for t in gen.generate(opts, count=5, seed=42, temperature=0.3)]
 
     # Extract values for comparison
-    values1 = [t.values for t in tuples1]
-    values2 = [t.values for t in tuples2]
+    values1 = [t.model_dump() for t in tuples1]
+    values2 = [t.model_dump() for t in tuples2]
 
     # Check overlap - OpenAI seed should give high reproducibility
     # We'll check if at least 60% overlap (allowing for some variation)
@@ -398,8 +398,8 @@ async def test_ai_tuples_temperature_affects_output(real_client: LLMClient) -> N
     high_temp = [t async for t in gen.generate(opts, count=5, seed=1, temperature=1.5)]
 
     # Extract values for comparison
-    values_low = [t.values for t in low_temp]
-    values_high = [t.values for t in high_temp]
+    values_low = [t.model_dump() for t in low_temp]
+    values_high = [t.model_dump() for t in high_temp]
 
     # Results should differ (can't guarantee every tuple is different, but sets should differ)
     assert (

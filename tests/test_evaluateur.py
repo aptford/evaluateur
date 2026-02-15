@@ -83,7 +83,7 @@ class TestCrossProductTupleGenerator:
 
         assert len(tuples) == 4
 
-        values_set = {(t.values["payer"], t.values["age"]) for t in tuples}
+        values_set = {(t["payer"], t["age"]) for t in tuples}
         expected = {
             ("Cigna", "adult"),
             ("Cigna", "pediatric"),
@@ -105,7 +105,7 @@ class TestCrossProductTupleGenerator:
         """Test that yielded items are GeneratedTuple instances."""
         async for t in generator.generate(options, count=1):
             assert isinstance(t, GeneratedTuple)
-            assert isinstance(t.values, dict)
+            assert isinstance(t.root, dict)
 
 
 class TestEvaluatorGenerateTuples:
@@ -131,8 +131,8 @@ class TestEvaluatorGenerateTuples:
         assert len(tuples) == 2
         for t in tuples:
             assert isinstance(t, GeneratedTuple)
-            assert "payer" in t.values
-            assert "age" in t.values
+            assert "payer" in t
+            assert "age" in t
 
     async def test_generate_tuples_is_async_iterator(
         self, evaluator: Evaluator
@@ -160,8 +160,8 @@ async def test_cross_product_does_not_materialize_full_space() -> None:
     gen = CrossProductTupleGenerator(client=None)
     tuples = [t async for t in gen.generate(LargeOptions(), count=1)]
     assert len(tuples) == 1
-    assert 0 <= int(tuples[0].values["a"]) < 10_000
-    assert 0 <= int(tuples[0].values["b"]) < 10_000
+    assert 0 <= int(tuples[0]["a"]) < 10_000
+    assert 0 <= int(tuples[0]["b"]) < 10_000
 
 
 async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None:
@@ -175,7 +175,7 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
             async for t in tuples:
                 _, meta = context_builder(t)
                 yield GeneratedQuery(
-                    query=f"Q:{t.values}",
+                    query=f"Q:{t.model_dump()}",
                     source_tuple=t,
                     metadata={"generator": "dummy", **meta},
                 )
@@ -186,8 +186,8 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
         ],
     )
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
-    t2 = GeneratedTuple(values={"payer": "Aetna", "age": "pediatric"})
+    t1 = GeneratedTuple({"payer": "Cigna", "age": "adult"})
+    t2 = GeneratedTuple({"payer": "Aetna", "age": "pediatric"})
 
     with patch(
         "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
@@ -201,8 +201,8 @@ async def test_evaluator_queries_is_streaming_and_injects_run_metadata() -> None
         ]
 
     assert len(results) == 2
-    assert results[0].source_tuple.values["payer"] == "Cigna"
-    assert results[1].source_tuple.values["payer"] == "Aetna"
+    assert results[0].source_tuple["payer"] == "Cigna"
+    assert results[1].source_tuple["payer"] == "Aetna"
 
     for q in results:
         assert q.metadata.generator == "dummy"
@@ -227,7 +227,7 @@ async def test_evaluator_queries_includes_instructions_in_context() -> None:
             async for t in tuples:
                 yield GeneratedQuery(query="x", source_tuple=t)
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t1 = GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     with patch(
         "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
@@ -269,7 +269,7 @@ async def test_evaluator_queries_instructions_included_with_goals() -> None:
         ],
     )
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t1 = GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     with patch(
         "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
@@ -319,7 +319,7 @@ async def test_evaluator_queries_goal_sampling_sets_focus_per_query() -> None:
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(200)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(200)
     ]
 
     with patch(
@@ -372,7 +372,7 @@ async def test_evaluator_queries_cycle_mode_round_robins_goals() -> None:
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(9)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(9)
     ]
 
     with patch(
@@ -425,7 +425,7 @@ async def test_evaluator_queries_cycle_mode_interleaves_categories() -> None:
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(10)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(10)
     ]
 
     with patch(
@@ -484,7 +484,7 @@ async def test_evaluator_queries_cycle_mode_sorts_cto_categories() -> None:
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(5)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(5)
     ]
 
     with patch(
@@ -529,7 +529,7 @@ async def test_evaluator_queries_cycle_mode_single_category_preserves_order() ->
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(6)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(6)
     ]
 
     with patch(
@@ -573,7 +573,7 @@ async def test_evaluator_queries_goal_sampling_excludes_disabled_goals() -> None
     )
 
     tuples = [
-        GeneratedTuple(values={"payer": "Cigna", "age": "adult"}) for _ in range(200)
+        GeneratedTuple({"payer": "Cigna", "age": "adult"}) for _ in range(200)
     ]
 
     with patch(
@@ -695,7 +695,7 @@ async def test_config_instructions_used_by_tuples() -> None:
 
     async def _fake_gen(self, options, count, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
         captured["instructions"] = instructions
-        yield GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+        yield GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     opts = SimpleOptions()
     with patch.object(_AI, "generate", _fake_gen):
@@ -717,7 +717,7 @@ async def test_config_instructions_overridden_by_method_tuples() -> None:
 
     async def _fake_gen(self, options, count, *, instructions=None, **kw):  # type: ignore[no-untyped-def]
         captured["instructions"] = instructions
-        yield GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+        yield GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     opts = SimpleOptions()
     with patch.object(_AI, "generate", _fake_gen):
@@ -749,7 +749,7 @@ async def test_config_instructions_used_by_queries() -> None:
             async for t in tuples:
                 yield GeneratedQuery(query="x", source_tuple=t)
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t1 = GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     with patch(
         "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
@@ -776,7 +776,7 @@ async def test_config_instructions_overridden_by_method_queries() -> None:
             async for t in tuples:
                 yield GeneratedQuery(query="x", source_tuple=t)
 
-    t1 = GeneratedTuple(values={"payer": "Cigna", "age": "adult"})
+    t1 = GeneratedTuple({"payer": "Cigna", "age": "adult"})
 
     with patch(
         "evaluateur.evaluator.build_query_generator", return_value=DummyQueryGenerator()
@@ -877,8 +877,8 @@ async def test_evaluator_tuples_respects_seed_and_temperature() -> None:
         )
     ]
 
-    values1 = {tuple(sorted(t.values.items())) for t in tuples1}
-    values2 = {tuple(sorted(t.values.items())) for t in tuples2}
+    values1 = {tuple(sorted(t.items())) for t in tuples1}
+    values2 = {tuple(sorted(t.items())) for t in tuples2}
 
     # With high temperature and different seeds, the sets should not be
     # fully identical.  We check that at least one tuple differs.

@@ -62,7 +62,7 @@ async for t in evaluator.tuples(
     count=50,      # Sample 50 from the full space
     seed=42,       # Reproducible results
 ):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 **How it works:**
@@ -104,7 +104,7 @@ async def main() -> None:
         count=20,  # Sample 20 from 125
         seed=42,
     ):
-        print(t.values)
+        print(t.model_dump())
 
 
 asyncio.run(main())
@@ -131,7 +131,7 @@ async for t in evaluator.tuples(
     count=20,
     instructions="Generate realistic patient scenarios",
 ):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 !!! note
@@ -173,7 +173,7 @@ generator = build_tuple_generator(client=client, strategy=TupleStrategy.CROSS_PR
 
 # Use directly
 async for t in generator.generate(options, count=50, seed=42):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 ---
@@ -220,7 +220,7 @@ from evaluateur.tuples import CrossProductTupleGenerator
 generator = CrossProductTupleGenerator()
 
 async for t in generator.generate(options, count=50, seed=42):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 ### AITupleGenerator
@@ -237,7 +237,7 @@ async for t in generator.generate(
     count=20,
     instructions="Create realistic combinations",
 ):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 ---
@@ -251,7 +251,7 @@ When `count >= total_combinations`:
 ```python
 # All 8 tuples are returned (2 × 2 × 2 = 8)
 async for t in evaluator.tuples(options, count=100):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 ### Diversity Sampling
@@ -261,11 +261,11 @@ When `count < total_combinations`, Farthest Point Sampling ensures maximum sprea
 ```python
 # Same seed = same 10 diverse tuples
 async for t in evaluator.tuples(options, count=10, seed=42):
-    print(t.values)
+    print(t.model_dump())
 
 # Different seed = different 10 diverse tuples (different starting point)
 async for t in evaluator.tuples(options, count=10, seed=43):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 Unlike uniform random sampling, consecutive samples will differ on multiple dimensions rather than potentially differing on just one.
@@ -316,7 +316,7 @@ async def main() -> None:
         count=50,
         seed=42,
     ):
-        print(f"  {t.values}")
+        print(f"  {t.model_dump()}")
 
     # Or use LLM for coherent combinations
     print("\nLLM-generated tuples:")
@@ -326,7 +326,7 @@ async def main() -> None:
         count=10,
         instructions="Create realistic enterprise scenarios",
     ):
-        print(f"  {t.values}")
+        print(f"  {t.model_dump()}")
 
 
 asyncio.run(main())

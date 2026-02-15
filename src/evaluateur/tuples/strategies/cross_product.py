@@ -163,7 +163,7 @@ class CrossProductTupleGenerator:
         if not field_names:
             # The cartesian product over an empty set of dimensions is a single empty tuple.
             # This mirrors the behavior below where `count <= 0` means "no limit".
-            yield GeneratedTuple(values={})
+            yield GeneratedTuple({})
             return
 
         # If any dimension has zero values, there are no combinations.
@@ -193,7 +193,7 @@ class CrossProductTupleGenerator:
                 combo = self._index_to_combo(idx, value_lists)  # type: ignore[arg-type]
                 yielded += 1
                 yield GeneratedTuple(
-                    values={name: value for name, value in zip(field_names, combo)}
+                    {name: value for name, value in zip(field_names, combo)}
                 )
             log.debug("CrossProductTupleGenerator: yielded %d tuples", yielded)
             return
@@ -206,7 +206,7 @@ class CrossProductTupleGenerator:
         for combo in combos:
             yielded += 1
             yield GeneratedTuple(
-                values={name: value for name, value in zip(field_names, combo)}
+                {name: value for name, value in zip(field_names, combo)}
             )
 
         log.debug("CrossProductTupleGenerator: yielded %d tuples", yielded)

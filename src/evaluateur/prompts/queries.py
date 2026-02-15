@@ -79,13 +79,13 @@ def render_tuple_kv_lines(tuple: GeneratedTuple) -> str:
     Returns:
         A formatted string with one dimension per line.
     """
-    if not tuple.values:
+    if not tuple:
         return "- (no dimensions)"
 
     # Preserve insertion order so it matches the upstream dimension order.
     lines = [
         f"- {key}: {_format_scalar_for_prompt(value)}"
-        for key, value in tuple.values.items()
+        for key, value in tuple.items()
     ]
     return "\n".join(lines)
 

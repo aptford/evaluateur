@@ -117,7 +117,7 @@ Each generated query includes:
 ```python
 async for q in evaluator.run(...):
     print(f"Query: {q.query}")
-    print(f"From tuple: {q.source_tuple.values}")
+    print(f"From tuple: {q.source_tuple.model_dump()}")
     print(f"Metadata: {q.metadata.model_dump()}")
 ```
 

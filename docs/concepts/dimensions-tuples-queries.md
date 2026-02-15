@@ -71,7 +71,7 @@ async for t in evaluator.tuples(
     count=50,
     seed=42,
 ):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 When `count` is less than total combinations, Evaluateur uses Farthest Point Sampling (FPS) to select a maximally diverse subset. Each selected tuple differs from all previously selected tuples on as many dimensions as possible, ensuring broad coverage of the evaluation space.
@@ -87,7 +87,7 @@ async for t in evaluator.tuples(
     count=50,
     instructions="Generate realistic patient scenarios",
 ):
-    print(t.values)
+    print(t.model_dump())
 ```
 
 ### Step 3: Tuples → Queries
@@ -148,7 +148,7 @@ Each query links back to its source tuple, making it easy to understand why a pa
 ```python
 async for q in evaluator.run(...):
     print(f"Query: {q.query}")
-    print(f"Generated from: {q.source_tuple.values}")
+    print(f"Generated from: {q.source_tuple.model_dump()}")
 ```
 
 ## Instructions at Each Stage

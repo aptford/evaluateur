@@ -54,7 +54,7 @@ Keep them short but specific.
 Don't include any extra explanation outside the query itself.
 """,
     ):
-        print(q.source_tuple.values, "->", q.query)
+        print(q.source_tuple.model_dump(), "->", q.query)
 
 
 asyncio.run(main())

@@ -16,8 +16,8 @@ async def test_seeded_sampling_is_deterministic() -> None:
     gen = CrossProductTupleGenerator(client=None)
     opts = SmallOptions()
 
-    out1 = [t.values async for t in gen.generate(opts, count=4, seed=123)]
-    out2 = [t.values async for t in gen.generate(opts, count=4, seed=123)]
+    out1 = [t.model_dump() async for t in gen.generate(opts, count=4, seed=123)]
+    out2 = [t.model_dump() async for t in gen.generate(opts, count=4, seed=123)]
 
     assert out1 == out2
     assert len(out1) == 4
@@ -28,8 +28,8 @@ async def test_seeded_sampling_differs_for_different_seeds() -> None:
     gen = CrossProductTupleGenerator(client=None)
     opts = SmallOptions()
 
-    out1 = [t.values async for t in gen.generate(opts, count=4, seed=1)]
-    out2 = [t.values async for t in gen.generate(opts, count=4, seed=2)]
+    out1 = [t.model_dump() async for t in gen.generate(opts, count=4, seed=1)]
+    out2 = [t.model_dump() async for t in gen.generate(opts, count=4, seed=2)]
 
     assert out1 != out2
 
@@ -39,7 +39,7 @@ async def test_seeded_sampling_has_no_duplicates() -> None:
     gen = CrossProductTupleGenerator(client=None)
     opts = SmallOptions()
 
-    out = [t.values async for t in gen.generate(opts, count=5, seed=999)]
+    out = [t.model_dump() async for t in gen.generate(opts, count=5, seed=999)]
     pairs = [(d["a"], d["b"]) for d in out]
 
     assert len(pairs) == len(set(pairs))
@@ -51,7 +51,7 @@ async def test_count_ge_total_yields_full_product() -> None:
     opts = SmallOptions()
 
     # total = 3 * 2 = 6
-    out = [t.values async for t in gen.generate(opts, count=999, seed=0)]
+    out = [t.model_dump() async for t in gen.generate(opts, count=999, seed=0)]
     assert len(out) == 6
 
     pairs = {(d["a"], d["b"]) for d in out}
@@ -87,7 +87,7 @@ async def test_diverse_sampling_maximizes_spread() -> None:
     opts = LargeOptions()
 
     # Sample 10 tuples from 5^5 = 3125 combinations
-    out = [t.values async for t in gen.generate(opts, count=10, seed=0)]
+    out = [t.model_dump() async for t in gen.generate(opts, count=10, seed=0)]
 
     # Check that consecutive pairs differ on at least 2 dimensions
     # With 5 dimensions, FPS should spread samples widely
@@ -105,7 +105,7 @@ async def test_diverse_sampling_average_pairwise_distance() -> None:
     gen = CrossProductTupleGenerator(client=None)
     opts = LargeOptions()
 
-    out = [t.values async for t in gen.generate(opts, count=10, seed=42)]
+    out = [t.model_dump() async for t in gen.generate(opts, count=10, seed=42)]
 
     # Compute average pairwise Hamming distance
     total_dist = 0
@@ -131,7 +131,7 @@ async def test_diverse_sampling_minimum_pairwise_distance() -> None:
     gen = CrossProductTupleGenerator(client=None)
     opts = LargeOptions()
 
-    out = [t.values async for t in gen.generate(opts, count=8, seed=0)]
+    out = [t.model_dump() async for t in gen.generate(opts, count=8, seed=0)]
 
     # Find minimum pairwise distance
     min_dist = float("inf")
@@ -170,8 +170,8 @@ async def test_shuffle_changes_value_order_across_seeds() -> None:
 
     # Request full product — the order of yielded tuples should differ
     # between seeds because value lists are shuffled.
-    out_seed0 = [t.values async for t in gen.generate(opts, count=0, seed=0)]
-    out_seed1 = [t.values async for t in gen.generate(opts, count=0, seed=1)]
+    out_seed0 = [t.model_dump() async for t in gen.generate(opts, count=0, seed=0)]
+    out_seed1 = [t.model_dump() async for t in gen.generate(opts, count=0, seed=1)]
 
     # Same combinations as sets, but different ordering.
     set0 = {tuple(sorted(d.items())) for d in out_seed0}

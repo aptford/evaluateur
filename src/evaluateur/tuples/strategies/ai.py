@@ -117,4 +117,4 @@ class AITupleGenerator:
         log.debug("AITupleGenerator: received %d tuples", len(result.tuples))
 
         for t in result.tuples:
-            yield GeneratedTuple(values=t.model_dump())
+            yield GeneratedTuple(t.model_dump())

@@ -58,7 +58,7 @@ async def main() -> None:
         seed=0,
         instructions="Write realistic user questions. Keep them short.",
     ):
-        print(q.source_tuple.values, "->", q.query)
+        print(q.source_tuple.model_dump(), "->", q.query)
 
 
 asyncio.run(main())
