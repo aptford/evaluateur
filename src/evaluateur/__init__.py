@@ -5,8 +5,8 @@ from .evaluator import Evaluator
 from .goals import Goal, GoalSpec
 from .queries import QueryMode, build_query_generator
 from .queries.merge import merge_query_metadata
-from .queries.models import GeneratedQuery, GeneratedTuple
-from .tuples import TupleStrategy, build_tuple_generator
+from .queries.models import GeneratedQuery
+from .tuples import GeneratedTuple, TupleStrategy, build_tuple_generator
 
 __all__ = [
     # Core
@@ -17,10 +17,10 @@ __all__ = [
     # Query generation
     "QueryMode",
     "GeneratedQuery",
-    "GeneratedTuple",
     "build_query_generator",
     "merge_query_metadata",
     # Tuple generation
+    "GeneratedTuple",
     "TupleStrategy",
     "build_tuple_generator",
     # Goals

@@ -6,7 +6,7 @@ from evaluateur.prompts.queries import (
     QUERY_SYSTEM_TEMPLATE,
     format_query_prompts,
 )
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 
 def test_format_query_prompts_includes_today() -> None:

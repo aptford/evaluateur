@@ -5,7 +5,8 @@ from .factories import build_query_generator
 from .instructor import InstructorQueryGenerator
 from .merge import merge_query_metadata
 from .mode import QueryMode
-from .models import GeneratedQuery, GeneratedTuple, QueryMetadata
+from .models import GeneratedQuery, QueryMetadata
+from evaluateur.tuples.models import GeneratedTuple
 from .protocols import ContextBuilder, QueryGenerator
 
 __all__ = [

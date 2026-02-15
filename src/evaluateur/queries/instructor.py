@@ -7,7 +7,8 @@ from inspect import isawaitable
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
-from evaluateur.queries.models import GeneratedQuery, GeneratedTuple, QueryMetadata
+from evaluateur.queries.models import GeneratedQuery, QueryMetadata
+from evaluateur.tuples.models import GeneratedTuple
 from evaluateur.queries.prompts import build_instructor_messages_for_tuple
 from evaluateur.queries.protocols import ContextBuilder
 

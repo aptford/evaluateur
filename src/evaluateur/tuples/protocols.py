@@ -5,7 +5,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 
 class TupleGenerator(Protocol):

@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from pydantic import BaseModel
 
 from evaluateur.client import LLMClient
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 from ..options_adapter import extract_dimension_values, shuffle_value_lists
 

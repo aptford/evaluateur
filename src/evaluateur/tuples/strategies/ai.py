@@ -10,7 +10,7 @@ from pydantic import BaseModel, create_model
 from evaluateur.client import LLMClient
 from evaluateur.options.types import ScalarValue
 from evaluateur.prompts.tuples import format_tuples_prompts
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 from ..options_adapter import extract_dimension_values, shuffle_dimensions, shuffle_value_lists
 

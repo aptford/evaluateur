@@ -11,7 +11,7 @@ import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from evaluateur.queries.models import GeneratedTuple
+    from evaluateur.tuples.models import GeneratedTuple
 
 # Template for the system message in query generation
 QUERY_SYSTEM_TEMPLATE = (

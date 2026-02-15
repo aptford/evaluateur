@@ -12,7 +12,7 @@ from evaluateur.prompts.queries import (
     format_query_prompts,
     render_tuple_kv_lines,
 )
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 # Re-export for backward compatibility
 _render_tuple_kv_lines = render_tuple_kv_lines

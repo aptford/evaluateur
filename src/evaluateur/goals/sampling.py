@@ -15,7 +15,7 @@ from evaluateur.goals.constants import CTO_CATEGORIES
 from evaluateur.goals.models import Goal, GoalFocusPlan, GoalSpec
 from evaluateur.goals.rendering import render_focused_goal_prompt
 from evaluateur.queries.context import compose_query_context
-from evaluateur.queries.models import GeneratedTuple
+from evaluateur.tuples.models import GeneratedTuple
 
 # Lookup for canonical CTO ordering; lower rank = earlier in the cycle.
 _CTO_RANK: dict[str, int] = {cat: i for i, cat in enumerate(CTO_CATEGORIES)}

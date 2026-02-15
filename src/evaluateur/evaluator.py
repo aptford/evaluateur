@@ -13,10 +13,10 @@ from evaluateur.goals.planning import plan_goal_guidance
 from evaluateur.options import OptionsGenerator
 from evaluateur.queries import (
     GeneratedQuery,
-    GeneratedTuple,
     QueryMode,
     build_query_generator,
 )
+from evaluateur.tuples.models import GeneratedTuple
 from evaluateur.queries.merge import merge_query_metadata
 from evaluateur.tuples import TupleStrategy, build_tuple_generator
 from evaluateur.utils import to_async_iterator

@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import Protocol, TypeAlias
 
-from evaluateur.queries.models import GeneratedQuery, GeneratedTuple, QueryMetadata
+from evaluateur.queries.models import GeneratedQuery, QueryMetadata
+from evaluateur.tuples.models import GeneratedTuple
 
 ContextBuilderMetadata: TypeAlias = Mapping[str, object] | QueryMetadata
 ContextBuilderResult: TypeAlias = tuple[str, ContextBuilderMetadata]
