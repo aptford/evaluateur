@@ -6,6 +6,14 @@ readme = "README.md"
 authors = [{ name = "Sasha Aptlin", email = "sasha@aptford.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.10,<4.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "anthropic>=0.78.0",
     "instructor>=1.14.5",

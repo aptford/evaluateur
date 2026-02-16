@@ -29,14 +29,13 @@ in [Hamel Husain's evaluation FAQ](https://hamel.dev/blog/posts/evals-faq/what-i
 ## How it works
 
 ```
-Dimensions        Options          Tuples              Queries
-                                   (combinations)      (natural language)
-┌──────────┐    ┌────────────┐    ┌───────────────┐    ┌──────────────────────┐
-│ payer     │───▶│ Cigna      │    │ Cigna, adult, │    │ "Does Cigna cover    │
-│ age       │    │ Aetna      │───▶│ off-label, TX │───▶│  off-label Dupixent  │
-│ complexity│    │ BCBS       │    │               │    │  for adults in TX?"  │
-│ geography │    │ ...        │    │ ...           │    │ ...                  │
-└──────────┘    └────────────┘    └───────────────┘    └──────────────────────┘
+  Dimensions    Options      Tuples              Queries
+                            (combinations)      (natural language)
+ ─────────────────────────────────────────────────────────────────
+  payer         Cigna        Cigna, adult,       "Does Cigna cover
+  age           Aetna        off-label, TX        off-label Dupixent
+  complexity    BCBS                              for adults in TX?"
+  geography     ...          ...                  ...
 ```
 
 1. **Dimensions → Options.** Define a Pydantic model with the axes of variation.
