@@ -4,75 +4,97 @@ import math
 
 import pytest
 
-from evaluateur.goals import GoalItem, GoalLayer, GoalSpec
+from evaluateur.goals import Goal, GoalSpec
 
 
 def test_goal_spec_render_prompt_is_compact_and_stable() -> None:
     spec = GoalSpec(
-        components=GoalLayer(
-            summary="Focus on freshness and grounding.",
-            items=[
-                GoalItem(
-                    name="freshness",
-                    must_include=["effective date", "as of"],
-                    avoid=["undated"],
-                    examples=[
-                        "As of today, what is the latest effective date for this policy?",
-                        "Please answer using the most recent version and cite the relevant section.",
-                    ],
-                )
-            ],
-        ),
+        goals=[
+            Goal(
+                name="freshness",
+                text="Checks effective dates and prefers newest policy version.",
+                category="components",
+            ),
+        ],
     )
 
-    prompt = spec.render_prompt(max_chars=2000)
-    assert "Query optimization goals" in prompt
+    prompt = spec.render_prompt()
+    assert "<evaluation_goals>" in prompt
+    assert "</evaluation_goals>" in prompt
     assert "Components:" in prompt
-    assert "freshness" in prompt
-    assert "must include" in prompt
-    assert "examples:" in prompt
-    assert "latest effective date" in prompt
+    assert "- Goal: Freshness" in prompt
+    assert "%" not in prompt  # single goal: no weight annotation
+    assert "  Description: Checks effective dates" in prompt
     assert len(prompt) <= 2000
 
-    focus_prompt = spec.render_focused_prompt(focus_area="components", max_chars=2000)
-    assert "focus area" in focus_prompt
-    assert "Components:" in focus_prompt
-    assert "freshness" in focus_prompt
-    assert "examples:" in focus_prompt
-    assert "Trajectories:" not in focus_prompt
-    assert "Outcomes:" not in focus_prompt
+
+def test_goal_spec_render_prompt_with_mixed_categories() -> None:
+    spec = GoalSpec(
+        goals=[
+            Goal(name="c1", text="Component goal", category="components"),
+            Goal(name="t1", text="Trajectory goal", category="trajectories"),
+            Goal(name="uncategorized", text="General goal"),
+        ],
+    )
+
+    prompt = spec.render_prompt()
+    assert "Components:" in prompt
+    assert "Trajectories:" in prompt
+    assert "General:" in prompt
+    assert "- Goal: Uncategorized (33%)" in prompt
+    assert "  Description: General goal" in prompt
+
+
+def test_goal_spec_render_prompt_uncategorized_only() -> None:
+    spec = GoalSpec(
+        goals=[
+            Goal(name="g1", text="First goal"),
+            Goal(name="g2", text="Second goal"),
+        ],
+    )
+
+    prompt = spec.render_prompt()
+    assert "<evaluation_goals>" in prompt
+    assert "- Goal: G1 (50%)" in prompt
+    assert "- Goal: G2 (50%)" in prompt
+    # No category headers when all uncategorized
+    assert "Components:" not in prompt
+    assert "General:" not in prompt
 
 
 def test_goal_spec_is_empty_when_no_goals() -> None:
     assert GoalSpec().is_empty() is True
 
 
-def test_goal_spec_render_prompt_truncation_respects_max_chars() -> None:
-    # Make a prompt that will definitely exceed the max.
+def test_goal_spec_is_empty_when_all_disabled() -> None:
+    spec = GoalSpec(goals=[Goal(text="disabled", weight=0.0)])
+    assert spec.is_empty() is True
+
+
+def test_goal_spec_available_goals() -> None:
     spec = GoalSpec(
-        components=GoalLayer(
-            summary=("x" * 500),
-            items=[GoalItem(name="n", must_include=["a" * 200])],
-        ),
+        goals=[
+            Goal(text="active", weight=1.0),
+            Goal(text="disabled", weight=0.0),
+            Goal(text="also active", weight=2.0),
+        ],
     )
-
-    max_chars = 80
-    prompt = spec.render_prompt(max_chars=max_chars)
-
-    assert len(prompt) <= max_chars
-    assert prompt.endswith("…\n")
+    active = spec.available_goals()
+    assert len(active) == 2
+    assert active[0].text == "active"
+    assert active[1].text == "also active"
 
 
-def test_goal_item_weight_must_be_finite_and_non_negative() -> None:
+def test_goal_weight_must_be_finite_and_non_negative() -> None:
     with pytest.raises(ValueError):
-        GoalItem(name="bad", weight=-0.1)
+        Goal(text="bad", weight=-0.1)
     with pytest.raises(ValueError):
-        GoalItem(name="bad", weight=math.inf)
+        Goal(text="bad", weight=math.inf)
     with pytest.raises(ValueError):
-        GoalItem(name="bad", weight=-math.inf)
+        Goal(text="bad", weight=-math.inf)
     with pytest.raises(ValueError):
-        GoalItem(name="bad", weight=math.nan)
+        Goal(text="bad", weight=math.nan)
 
     # 0.0 is allowed and used to disable goals without deleting them.
-    it = GoalItem(name="disabled", weight=0.0)
+    it = Goal(text="disabled", weight=0.0)
     assert it.weight == 0.0

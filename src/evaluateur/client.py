@@ -1,196 +1,85 @@
+"""Internal client resolution for evaluateur.
+
+This module is not part of the public API. It provides a minimal data
+bundle (``LLMClient``) and a resolver function that translates user-facing
+parameters into that bundle.
+"""
+
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 import instructor
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 
-DEFAULT_MODEL_NAME = os.getenv("EVALUATEUR_MODEL_NAME", "gpt-4o-mini")
+DEFAULT_MODEL = os.getenv("EVALUATEUR_MODEL", "openai/gpt-4.1-mini")
 
 
-@dataclass
-class LLMClient:
-    """Async wrapper around the underlying LLM clients used by the evaluator.
+class LLMClient(NamedTuple):
+    """Internal bundle: async instructor client + model name + provider."""
 
-    This class is intentionally small and focused on configuration so that
-    higher-level code can remain provider-agnostic. All operations are async.
-
-    Factory Methods
-    ---------------
-    - ``from_env()`` - Create from environment variables (simplest path)
-    - ``from_openai()`` - Create from a custom AsyncOpenAI client
-    - ``from_instructor()`` - Create from a pre-configured async Instructor client
-
-    Examples
-    --------
-    Simple usage with environment variables::
-
-        client = LLMClient.from_env()
-
-    With custom AsyncOpenAI client::
-
-        from openai import AsyncOpenAI
-        client = LLMClient.from_openai(AsyncOpenAI())
-
-    Pre-configured Instructor client::
-
-        import instructor
-        from openai import AsyncOpenAI
-        patched = instructor.from_openai(AsyncOpenAI())
-        client = LLMClient.from_instructor(patched)
-    """
-
-    provider: str
+    instructor_client: Any
     model_name: str
-    _instructor_client: Any
+    provider: str | None = None
 
-    @classmethod
-    def from_env(
-        cls,
-        provider: str = "openai",
-        model_name: str | None = None,
-    ) -> LLMClient:
-        """Create an ``LLMClient`` using environment variables.
 
-        By default this looks up ``OPENAI_API_KEY`` via ``python-dotenv`` and
-        configures an async Instructor client for OpenAI.
+def resolve_client(
+    *,
+    llm: str | None = None,
+    client: Any | None = None,
+    model_name: str | None = None,
+) -> LLMClient:
+    """Build an LLMClient from user-facing parameters.
 
-        Parameters
-        ----------
-        provider
-            The LLM provider to use (e.g., "openai", "anthropic").
-        model_name
-            The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
-            or "gpt-4o-mini".
+    Parameters
+    ----------
+    llm
+        A ``"provider/model-name"`` string, e.g. ``"openai/gpt-4.1-mini"``
+        or ``"anthropic/claude-haiku-4-5"``.  Mutually exclusive
+        with *client*.
+    client
+        A pre-configured async Instructor client.  Must be paired with
+        *model_name*.  Mutually exclusive with *llm*.
+    model_name
+        The model identifier passed to ``chat.completions.create(model=...)``.
+        Required when *client* is provided, ignored otherwise.
 
-        Returns
-        -------
-        LLMClient
-            A configured async client ready for use with the evaluator.
-        """
-        load_dotenv()
-        model = model_name or DEFAULT_MODEL_NAME
+    Returns
+    -------
+    LLMClient
+        An ``(instructor_client, model_name, provider)`` bundle ready for
+        internal use.
 
-        if provider == "openai":
-            async_client = AsyncOpenAI()
-            inst_client = instructor.from_openai(async_client)
-        else:
-            inst_client = instructor.from_provider(f"{provider}/{model}")
+    Raises
+    ------
+    ValueError
+        If both *llm* and *client* are given, if *client* is given without
+        *model_name*, or if the *llm* string is not in ``"provider/model"``
+        format.
+    """
+    if llm and client:
+        raise ValueError("Provide 'llm' or 'client', not both.")
 
-        return cls(
-            provider=provider,
-            model_name=model,
-            _instructor_client=inst_client,
-        )
-
-    @classmethod
-    def from_openai(
-        cls,
-        openai_client: AsyncOpenAI,
-        model_name: str | None = None,
-        *,
-        provider: str = "openai",
-        **instructor_kwargs: Any,
-    ) -> LLMClient:
-        """Create an ``LLMClient`` from a custom AsyncOpenAI client.
-
-        Use this method when you need to pass a pre-configured or wrapped
-        AsyncOpenAI client for observability or custom configuration.
-
-        Parameters
-        ----------
-        openai_client
-            An AsyncOpenAI-compatible client instance.
-        model_name
-            The model name to use. Defaults to ``EVALUATEUR_MODEL_NAME`` env var
-            or "gpt-4o-mini".
-        provider
-            Provider identifier for metadata purposes. Defaults to "openai".
-        **instructor_kwargs
-            Additional keyword arguments passed to ``instructor.from_openai()``.
-
-        Returns
-        -------
-        LLMClient
-            A configured async client ready for use with the evaluator.
-
-        Examples
-        --------
-        With custom base URL::
-
-            from openai import AsyncOpenAI
-            custom = AsyncOpenAI(base_url="https://my-proxy.com/v1")
-            client = LLMClient.from_openai(custom)
-
-        With Instructor mode::
-
-            import instructor
-            from openai import AsyncOpenAI
-            client = LLMClient.from_openai(
-                AsyncOpenAI(),
-                mode=instructor.Mode.JSON,
+    if client is not None:
+        if model_name is None:
+            raise ValueError(
+                "'model_name' is required when passing a pre-configured client."
             )
-        """
-        model = model_name or DEFAULT_MODEL_NAME
-        inst_client = instructor.from_openai(openai_client, **instructor_kwargs)
+        return LLMClient(instructor_client=client, model_name=model_name)
 
-        return cls(
-            provider=provider,
-            model_name=model,
-            _instructor_client=inst_client,
+    load_dotenv()
+    model_str = llm or DEFAULT_MODEL
+
+    if "/" not in model_str:
+        raise ValueError(
+            f"Expected 'provider/model-name' format, got: {model_str!r}. "
+            f"Examples: 'openai/gpt-4.1-mini', 'anthropic/claude-haiku-4-5-20251001'"
         )
 
-    @classmethod
-    def from_instructor(
-        cls,
-        instructor_client: Any,
-        model_name: str | None = None,
-        *,
-        provider: str = "openai",
-    ) -> LLMClient:
-        """Create an ``LLMClient`` from a pre-configured async Instructor client.
-
-        Use this method when you have already set up an async Instructor client
-        with custom configuration, hooks, or patching.
-
-        Parameters
-        ----------
-        instructor_client
-            A pre-configured async Instructor client, typically created via
-            ``instructor.from_openai(AsyncOpenAI())``.
-        model_name
-            The model name for metadata purposes. Defaults to
-            ``EVALUATEUR_MODEL_NAME`` env var or "gpt-4o-mini".
-        provider
-            Provider identifier for metadata purposes. Defaults to "openai".
-
-        Returns
-        -------
-        LLMClient
-            A configured async client ready for use with the evaluator.
-
-        Examples
-        --------
-        With custom Instructor setup::
-
-            import instructor
-            from openai import AsyncOpenAI
-
-            inst = instructor.from_openai(AsyncOpenAI(), mode=instructor.Mode.TOOLS)
-            client = LLMClient.from_instructor(inst, model_name="gpt-4o")
-        """
-        model = model_name or DEFAULT_MODEL_NAME
-
-        return cls(
-            provider=provider,
-            model_name=model,
-            _instructor_client=instructor_client,
-        )
-
-    @property
-    def instructor_client(self) -> Any:
-        """Return the async Instructor client."""
-        return self._instructor_client
+    provider, name = model_str.split("/", 1)
+    return LLMClient(
+        instructor_client=instructor.from_provider(model_str, async_client=True),
+        model_name=name,
+        provider=provider,
+    )

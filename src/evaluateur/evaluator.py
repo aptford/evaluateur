@@ -1,27 +1,25 @@
 from __future__ import annotations
 
 import logging
-import random
 from collections.abc import AsyncIterator, Sequence
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
 from pydantic import BaseModel
 
-from evaluateur.client import LLMClient
-from evaluateur.configs import QueryConfig, TupleConfig
-from evaluateur.generators import OptionsGenerator
-from evaluateur.generators.query.context import compose_query_context
-from evaluateur.goals import GoalFocusArea, GoalSpec
-from evaluateur.models import GeneratedQuery, GeneratedTuple, QueryMetadata
-from evaluateur._internal.async_iter import to_async_iterator
-from evaluateur._internal.evaluator_factories import (
+from evaluateur.client import resolve_client
+from evaluateur.config import DEFAULT_CONFIG, EvaluatorConfig
+from evaluateur.goals.models import GoalMode, GoalSpec
+from evaluateur.goals.planning import plan_goal_guidance
+from evaluateur.options import OptionsGenerator
+from evaluateur.queries import (
+    GeneratedQuery,
+    QueryMode,
     build_query_generator,
-    build_tuple_generator,
 )
-from evaluateur._internal.evaluator_goal_guidance import (
-    GoalSamplingContextBuilder,
-    normalize_goal_spec,
-)
+from evaluateur.tuples.models import GeneratedTuple
+from evaluateur.queries.merge import merge_query_metadata
+from evaluateur.tuples import TupleStrategy, build_tuple_generator
+from evaluateur.utils import to_async_iterator
 
 log = logging.getLogger(__name__)
 
@@ -33,41 +31,123 @@ class Evaluator:
 
     The evaluator is parameterized by a Pydantic model that describes the
     dimensions of a query (e.g. payer, age, complexity, geography).
+
+    Parameters
+    ----------
+    model
+        A Pydantic model class describing query dimensions.
+    llm
+        A ``"provider/model-name"`` string, e.g. ``"openai/gpt-4.1-mini"``
+        or ``"anthropic/claude-3-5-sonnet-latest"``.  Mutually exclusive
+        with *client*.  When omitted, reads the ``EVALUATEUR_MODEL`` env
+        var (default: ``"openai/gpt-4.1-mini"``).
+    client
+        A pre-configured async Instructor client for advanced use cases
+        (observability wrappers, custom providers).  Must be paired with
+        *model_name*.  Mutually exclusive with *llm*.
+    model_name
+        The model identifier passed to ``chat.completions.create(model=...)``.
+        Required when *client* is provided, ignored otherwise.
+    config
+        Optional :class:`EvaluatorConfig` for default parameter values.
+
+    Examples
+    --------
+    Simple usage::
+
+        evaluator = Evaluator(MyQuery, llm="openai/gpt-4.1-mini")
+
+    Switch providers::
+
+        evaluator = Evaluator(MyQuery, llm="anthropic/claude-3-5-sonnet-latest")
+
+    Default from environment (reads ``EVALUATEUR_MODEL``)::
+
+        evaluator = Evaluator(MyQuery)
+
+    Advanced — bring your own Instructor client::
+
+        import instructor
+        from openai import AsyncOpenAI
+
+        inst = instructor.from_openai(AsyncOpenAI())
+        evaluator = Evaluator(MyQuery, client=inst, model_name="gpt-4o")
     """
 
     def __init__(
         self,
         model: Type[QueryModelT],
         *,
-        client: LLMClient | None = None,
-        context: str = "",
+        llm: str | None = None,
+        client: Any | None = None,
+        model_name: str | None = None,
+        config: EvaluatorConfig | None = None,
     ) -> None:
         self.model = model
-        self.client = client or LLMClient.from_env()
-        self.context = context
-        self._options_generator = OptionsGenerator(self.client)
+        self._client = resolve_client(llm=llm, client=client, model_name=model_name)
+        self.config = config or DEFAULT_CONFIG
         log.debug(
-            "Evaluator initialized: model=%s, provider=%s, model_name=%s",
+            "Evaluator initialized: model=%s, llm=%s",
             model.__name__,
-            self.client.provider,
-            self.client.model_name,
+            self._client.model_name,
         )
 
-    async def options(self, *, config: TupleConfig = TupleConfig()) -> BaseModel:
+    async def parse_goals(self, text: str) -> GoalSpec:
+        """Parse free-form text into a structured GoalSpec.
+
+        Uses the evaluator's configured LLM to extract structured goals
+        from natural language. Useful for inspecting or reusing parsed
+        goals across multiple runs.
+
+        Parameters
+        ----------
+        text
+            Free-form goal guidance text.
+
+        Returns
+        -------
+        GoalSpec
+            A structured goal specification. Returns an empty GoalSpec
+            if *text* is blank.
+        """
+        from evaluateur.goals.parsing import parse_goal_spec
+
+        return await parse_goal_spec(self._client, text)
+
+    async def options(
+        self, *, instructions: str | None = None, count_per_field: int | None = None
+    ) -> BaseModel:
         """Generate an options ``BaseModel`` from the configured query model.
 
         Every simple field on the input model is turned into a sequence of
         options. Iterator fields (lists, tuples, etc.) are preserved.
+
+        Parameters
+        ----------
+        instructions
+            Additional instructions for the LLM. Defaults to
+            ``config.instructions`` when not provided.
+        count_per_field
+            Number of options to generate per field. Defaults to config value.
         """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
+        effective_count = (
+            count_per_field
+            if count_per_field is not None
+            else self.config.options_count_per_field
+        )
         log.info(
             "Generating options for %s (n=%d)",
             self.model.__name__,
-            config.options_per_field,
+            effective_count,
         )
-        result = await self._options_generator.generate_options(
+        options_generator = OptionsGenerator(self._client)
+        result = await options_generator.generate_options(
             self.model,
-            instructions=config.instructions,
-            count_per_field=config.options_per_field,
+            instructions=effective_instructions,
+            count_per_field=effective_count,
         )
         log.debug("Generated options: %s", result)
         return result
@@ -76,37 +156,75 @@ class Evaluator:
         self,
         maybe_options: BaseModel | None,
         *,
-        config: TupleConfig,
+        instructions: str | None,
+        count_per_field: int | None,
     ) -> BaseModel:
         """Ensure options are available, generating them if not provided."""
         if maybe_options is not None:
             return maybe_options
-        return await self.options(config=config)
+        return await self.options(
+            instructions=instructions, count_per_field=count_per_field
+        )
 
     async def tuples(
         self,
-        options: BaseModel | None = None,
+        options: BaseModel,
         *,
-        config: TupleConfig = TupleConfig(),
+        strategy: TupleStrategy | None = None,
+        count: int | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
+        instructions: str | None = None,
     ) -> AsyncIterator[GeneratedTuple]:
         """Generate tuples as an async iterator, yielding one at a time.
 
-        If `options` is omitted, the evaluator will first generate options.
+        Parameters
+        ----------
+        options
+            The options model containing dimension values.
+        strategy
+            Tuple generation strategy. Defaults to config value.
+        count
+            Number of tuples to generate. Defaults to config value.
+        seed
+            Random seed for variation control. Defaults to config value.
+        temperature
+            LLM sampling temperature for AI strategy (0.0-2.0). Lower values produce
+            more consistent outputs; higher values produce more diverse outputs.
+            Defaults to config value (0.5).
+        instructions
+            Additional instructions forwarded to tuple generators that support
+            them. Defaults to ``config.instructions`` when not provided.
         """
-        log.info(
-            "Generating tuples: strategy=%s, count=%d",
-            config.strategy.value,
-            config.count,
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
+        effective_strategy = (
+            strategy if strategy is not None else self.config.get_tuple_strategy()
+        )
+        effective_count = count if count is not None else self.config.tuples_count
+        effective_seed = seed if seed is not None else self.config.tuples_seed
+        effective_temperature = (
+            temperature if temperature is not None else self.config.tuples_temperature
         )
 
-        options_instance = await self._ensure_options(options, config=config)
-        log.debug("Using options: %s", options_instance)
+        log.info(
+            "Generating tuples: strategy=%s, count=%d",
+            effective_strategy.value,
+            effective_count,
+        )
 
-        tuple_gen = build_tuple_generator(client=self.client, strategy=config.strategy)
+        log.debug("Using options: %s", options)
+
+        tuple_gen = build_tuple_generator(client=self._client, strategy=effective_strategy)
         generated_count = 0
 
         async for t in tuple_gen.generate(
-            options_instance, config.count, seed=config.seed
+            options,
+            effective_count,
+            seed=effective_seed,
+            temperature=effective_temperature,
+            instructions=effective_instructions,
         ):
             generated_count += 1
             yield t
@@ -117,80 +235,66 @@ class Evaluator:
         self,
         *,
         tuples: Sequence[GeneratedTuple] | AsyncIterator[GeneratedTuple],
-        config: QueryConfig = QueryConfig(),
+        instructions: str | None = None,
+        goal_mode: GoalMode | None = None,
+        query_mode: QueryMode | None = None,
+        seed: int | None = None,
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
+        """Generate natural language queries from tuples.
+
+        Parameters
+        ----------
+        tuples
+            Sequence or async stream of tuples to turn into queries.
+        instructions
+            Instructions for query generation. Defaults to
+            ``config.instructions`` when not provided.
+        goal_mode
+            Goal guidance mode ("sample", "cycle", or "full"). Defaults to config.
+        query_mode
+            Query generator mode. Defaults to config.
+        seed
+            Random seed for goal sampling. Defaults to config.
+        goals
+            Goal specification for guided query generation.
+        """
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
+        effective_goal_mode = (
+            goal_mode if goal_mode is not None else self.config.get_goal_mode()
+        )
+        effective_query_mode = (
+            query_mode if query_mode is not None else self.config.get_query_mode()
+        )
+        effective_seed = seed if seed is not None else self.config.tuples_seed
+
         log.info(
-            "Generating queries: mode=%s, tuple_count=%s",
-            config.mode.value,
+            "Generating queries: tuple_count=%s",
             "streaming" if hasattr(tuples, "__aiter__") else len(tuples),  # type: ignore[arg-type]
         )
 
-        query_gen = build_query_generator(client=self.client, mode=config.mode)
-
-        goal_spec = await normalize_goal_spec(self.client, goals)
-        focus_areas: list[GoalFocusArea] = (
-            goal_spec.available_focus_areas() if goal_spec is not None else []
-        )
-        goal_guided = bool(focus_areas)
-
-        run_metadata = QueryMetadata(
-            mode=config.mode.value,
-            goal_guided=goal_guided,
-            goal_mode=config.goal_mode,
-            query_goals=(
-                goal_spec
-                if goal_spec is not None and not goal_spec.is_empty()
-                else None
-            ),
+        guidance = await plan_goal_guidance(
+            client=self._client,
+            goals=goals,
+            goal_mode=effective_goal_mode,
+            instructions=effective_instructions,
+            seed=effective_seed,
         )
 
-        # Base context is shared across the run; goal sampling can append a
-        # per-tuple focused goal prompt via the context_builder.
-        base_context = compose_query_context(
-            self.context,
-            instructions=config.instructions,
-        )
+        query_gen = build_query_generator(client=self._client, mode=effective_query_mode)
 
-        q: GeneratedQuery
-        if config.goal_mode == "sample" and goal_spec is not None and focus_areas:
-            rng = random.Random(config.goal_seed)
-            context_builder = GoalSamplingContextBuilder(
-                base_context=base_context,
-                goal_spec=goal_spec,
-                focus_areas=focus_areas,
-                rng=rng,
-                max_chars_for_goals=config.max_chars_for_goals,
-            )
-
-            async for q in query_gen.generate(
-                to_async_iterator(tuples),
-                base_context,
-                context_builder=context_builder,
-            ):
-                yield GeneratedQuery(
-                    query=q.query,
-                    source_tuple=q.source_tuple,
-                    metadata=QueryMetadata.merge(
-                        run_metadata=run_metadata,
-                        per_query_metadata=q.metadata,
-                    ),
-                )
-            return
-
-        goal_prompt: str | None = None
-        if config.goal_mode == "full" and goal_spec is not None:
-            # Full mode conditions the entire run on all goals at once.
-            goal_prompt = goal_spec.render_prompt(max_chars=config.max_chars_for_goals)
-
-        effective_context = compose_query_context(base_context, goal_prompt=goal_prompt)
-
-        async for q in query_gen.generate(to_async_iterator(tuples), effective_context):
+        async for q in query_gen.generate(
+            to_async_iterator(tuples),
+            guidance.context,
+            context_builder=guidance.context_builder,
+        ):
             yield GeneratedQuery(
                 query=q.query,
                 source_tuple=q.source_tuple,
-                metadata=QueryMetadata.merge(
-                    run_metadata=run_metadata,
+                metadata=merge_query_metadata(
+                    run_metadata=guidance.run_metadata,
                     per_query_metadata=q.metadata,
                 ),
             )
@@ -199,26 +303,61 @@ class Evaluator:
         self,
         *,
         options: BaseModel | None = None,
-        tuple_config: TupleConfig = TupleConfig(),
-        query_config: QueryConfig = QueryConfig(),
+        instructions: str | None = None,
+        count_per_field: int | None = None,
+        tuple_strategy: TupleStrategy | None = None,
+        tuple_count: int | None = None,
+        seed: int | None = None,
+        goal_mode: GoalMode | None = None,
+        query_mode: QueryMode | None = None,
         goals: GoalSpec | str | None = None,
     ) -> AsyncIterator[GeneratedQuery]:
         """Convenience wrapper: options → tuples → queries (streaming).
 
-        Notes
-        -----
-        Instructions are configured via the config objects:
-        - Use ``QueryConfig.instructions`` to guide query writing.
-        - Use ``TupleConfig.options_instructions`` to guide option generation.
+        Parameters
+        ----------
+        options
+            Pre-generated options model instance. If not provided, options
+            will be generated using ``instructions`` and ``count_per_field``.
+        instructions
+            Instructions shared across options, tuples, and queries.
+            Defaults to ``config.instructions`` when not provided.
+        count_per_field
+            Number of options to generate per field. Defaults to config.
+        tuple_strategy
+            Tuple sampling strategy. Defaults to config.
+        tuple_count
+            Number of tuples to generate. Defaults to config.
+        seed
+            Random seed for tuple sampling and goal sampling. Defaults to config.
+        goal_mode
+            Goal guidance mode ("sample", "cycle", or "full"). Defaults to config.
+        query_mode
+            Query generator mode. Defaults to config.
+        goals
+            Goal specification for guided query generation.
         """
-
-        tuple_iter = self.tuples(
+        effective_instructions = (
+            instructions if instructions is not None else self.config.instructions
+        )
+        options_instance = await self._ensure_options(
             options,
-            config=tuple_config,
+            instructions=effective_instructions,
+            count_per_field=count_per_field,
+        )
+        tuple_iter = self.tuples(
+            options_instance,
+            strategy=tuple_strategy,
+            count=tuple_count,
+            seed=seed,
+            instructions=effective_instructions,
         )
         async for q in self.queries(
             tuples=tuple_iter,
-            config=query_config,
+            instructions=effective_instructions,
+            goal_mode=goal_mode,
+            query_mode=query_mode,
+            seed=seed,
             goals=goals,
         ):
             yield q
