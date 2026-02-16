@@ -1,20 +1,65 @@
 # Evaluateur
 
-Synthetic evaluation helper for LLM applications, built around the
-**dimensions → tuples → queries** flow described in [Hamel Husain's FAQ](https://hamel.dev/blog/posts/evals-faq/what-is-the-best-approach-for-generating-synthetic-data.html).
+[![PyPI](https://img.shields.io/pypi/v/evaluateur)](https://pypi.org/project/evaluateur/)
+[![Python](https://img.shields.io/pypi/pyversions/evaluateur)](https://pypi.org/project/evaluateur/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Generate diverse, realistic test queries for LLM applications. Define your
+evaluation space as dimensions, sample combinations, and convert them to
+natural language -- with optional goal-guided optimization to target specific
+failure modes.
+
+## Why
+
+Evaluations require test data. Early on, you don't have any.
+
+If you ask an LLM to "generate 50 test queries," you get repetitive inputs.
+The model gravitates toward the same phrasing, the same scenarios, the same
+level of complexity. Manual test cases fare no better: they reflect what
+the author thought to test, not what actually breaks.
+
+Evaluateur solves this with structure. You define **dimensions** -- the axes
+along which your system's behavior varies -- and the library generates
+combinations that cover the space systematically, including edge cases that
+neither a human nor an LLM would produce on its own.
+
+The approach follows the **dimensions → tuples → queries** pattern described
+in [Hamel Husain's evaluation FAQ](https://hamel.dev/blog/posts/evals-faq/what-is-the-best-approach-for-generating-synthetic-data.html).
+
+## How it works
+
+```
+Dimensions        Options          Tuples              Queries
+                                   (combinations)      (natural language)
+┌──────────┐    ┌────────────┐    ┌───────────────┐    ┌──────────────────────┐
+│ payer     │───▶│ Cigna      │    │ Cigna, adult, │    │ "Does Cigna cover    │
+│ age       │    │ Aetna      │───▶│ off-label, TX │───▶│  off-label Dupixent  │
+│ complexity│    │ BCBS       │    │               │    │  for adults in TX?"  │
+│ geography │    │ ...        │    │ ...           │    │ ...                  │
+└──────────┘    └────────────┘    └───────────────┘    └──────────────────────┘
+```
+
+1. **Dimensions → Options.** Define a Pydantic model with the axes of variation.
+   The LLM generates diverse values for each field.
+2. **Options → Tuples.** Sample combinations. The default cross-product strategy
+   uses Farthest Point Sampling to maximize diversity across dimensions. An
+   AI strategy is also available for semantically coherent combinations.
+3. **Tuples → Queries.** Each combination is converted into a natural language
+   query, ready to feed to your agent.
 
 ## Installation
-
-The project is packaged as a normal Python library. With `uv`:
 
 ```bash
 uv add evaluateur
 ```
 
-## Basic usage
+or with pip:
 
-Define a Pydantic model that represents the dimensions of your evaluation
-space, then use the `Evaluator` to generate options and queries:
+```bash
+pip install evaluateur
+```
+
+## Quick start
 
 ```python
 import asyncio
@@ -28,31 +73,19 @@ class Query(BaseModel):
     age: str = Field(..., description="patient age category, like 'adult' or 'pediatric'")
     complexity: str = Field(
         ...,
-        description="complexity of the query to account for the edge cases, like 'off-label', 'comorbidities', etc",
+        description="query complexity, like 'off-label', 'comorbidities', etc",
     )
-    geography: str = Field(..., description="geography indicator, like a zip code, specific state or county")
+    geography: str = Field(..., description="geography indicator, like a state or zip code")
 
 
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    # Step 1: generate options for each dimension using Instructor
-    options = await evaluator.options(
-        instructions="Focus on common US payers and edge-case clinical scenarios.",
-        count_per_field=5,
-    )
-
-    # Step 2: stream tuples -> natural language queries
     async for q in evaluator.run(
-        options=options,
         tuple_strategy=TupleStrategy.CROSS_PRODUCT,
         tuple_count=50,
         seed=0,
-        instructions="""
-Write realistic user questions.
-Keep them short but specific.
-Don't include any extra explanation outside the query itself.
-""",
+        instructions="Focus on common US payers and edge-case clinical scenarios.",
     ):
         print(q.source_tuple.model_dump(), "->", q.query)
 
@@ -60,204 +93,28 @@ Don't include any extra explanation outside the query itself.
 asyncio.run(main())
 ```
 
-The evaluator uses environment variables (for example `OPENAI_API_KEY`)
-and supports any provider that `instructor` supports. You can customise the
-provider and model via the `LLMClient` helper if needed.
+The `run()` method handles the full pipeline: generating options, sampling
+tuples, and converting each tuple to a natural language query.
 
-If your input model already uses iterator fields (for example
-`payer: list[str] = ["Cigna", "Aetna"]`), those lists are treated as fixed
-options and are not modified by `generate_options()`. Scalar fields of any
-basic type (`str`, `int`, `float`, and so on) are turned into lists of
-options automatically.
+For step-by-step control, call `evaluator.options()`, `evaluator.tuples()`,
+and `evaluator.queries()` separately.
 
-### Instructions
+## Goal-guided optimization
 
-Evaluateur accepts instructions at each stage:
+The first batch of queries gives you a baseline. After running them through
+your agent and analyzing the failures, you can feed those observations back
+as **goals** to bias the next round of query generation toward specific
+failure modes.
 
-- **Option generation**: use `Evaluator.options(instructions=...)` to guide what
-  _dimension values_ to propose (e.g. "Focus on common US payers.").
-- **Tuple generation**: use `Evaluator.tuples(instructions=...)` to guide how
-  tuples are sampled when the generator supports it.
-- **Query generation**: use `Evaluator.queries(instructions=...)` to guide how the
-  _natural language query_ should be written (e.g. "Keep the question short
-  and specific.").
-- **Query mode**: use `Evaluator.queries(query_mode=...)` or `Evaluator.run(query_mode=...)`
-  to select a query generator mode (currently `QueryMode.INSTRUCTOR`).
+Goals can be categorized using the **CTO framework**:
 
-`Evaluator.run(instructions=...)` shares the same instruction string across all
-three stages.
+- **Components** -- system internals: retrieval freshness, citation accuracy, tool reliability.
+- **Trajectories** -- decision sequences: tool selection order, conflict resolution, retry behavior.
+- **Outcomes** -- what the user sees: output format, actionability, appropriate uncertainty.
 
-## Tuple generation: seeded sampling for cross product
-
-When `TupleStrategy.CROSS_PRODUCT` is used and `0 < count < total_combinations`,
-Evaluateur returns a **seeded randomized sample** of the cartesian product
-(_uniform without replacement_). This helps avoid always taking the "first N"
-combinations when the space is large.
-
-- To get reproducible results, set `seed=...`.
-- Changing the seed gives you a different randomized subset.
-
-## Goal-guided query optimization
-
-You can guide query generation by providing a `GoalSpec` (structured) or
-free-form text (which is parsed into a `GoalSpec`).
-
-Goals are flat and optionally categorized using the CTO framework
-(Components / Trajectories / Outcomes) or any custom categories.
-
-Structured text (numbered/bulleted lists) is parsed without an LLM call.
-CTO section headers like `Components:` are auto-detected. Free-form text
-falls back to LLM enrichment.
-
-### Sampling goals per query (diversity mode)
-
-By default, Evaluateur picks a single goal _per generated query_.
-This helps ensure one run produces a mix of different stress-test styles.
-
-```python
-import asyncio
-from pydantic import BaseModel, Field
-
-from evaluateur import Evaluator, Goal, GoalSpec
-
-
-class Query(BaseModel):
-    payer: str = Field(...)
-    age: str = Field(...)
-    complexity: str = Field(...)
-    geography: str = Field(...)
-
-
-async def main() -> None:
-    evaluator = Evaluator(Query)
-
-    goals = GoalSpec(goals=[
-        Goal(name="freshness checks", text="Test data currency", category="components"),
-        Goal(name="conflict handling", text="Test conflicting sources", category="trajectories"),
-        Goal(name="checklist-ready", text="Request structured output", category="outcomes"),
-    ])
-
-    async for q in evaluator.run(
-        seed=0,
-        instructions="Make the question sound like a real user.",
-        goals=goals,
-    ):
-        print(q.metadata.goal_focus, "->", q.query)
-        break
-
-
-asyncio.run(main())
-```
-
-## Context builders (advanced)
-
-A **context builder** is a callable used by query generators to vary the prompt
-**per tuple**, instead of using one shared `context` string for the whole run.
-
-It returns two things:
-
-- A `context` string to include in the prompt for that tuple
-- Optional per-query `metadata` (extra keys are allowed) that will be merged into `q.metadata`
-
-Evaluateur uses a context builder internally when you enable goal sampling
-(`goal_mode="sample"`) so that each generated query can focus on a
-different goal.
-
-If you write a custom query generator, accept `context_builder` and fall back to
-the base `context` when it is not provided.
-
-```python
-from __future__ import annotations
-
-from collections.abc import AsyncIterator
-
-from evaluateur.queries import ContextBuilder, GeneratedQuery, GeneratedTuple
-
-
-class MyQueryGenerator:
-    async def generate(
-        self,
-        tuples: AsyncIterator[GeneratedTuple],
-        context: str,
-        *,
-        context_builder: ContextBuilder | None = None,
-    ) -> AsyncIterator[GeneratedQuery]:
-        async for t in tuples:
-            if context_builder is None:
-                effective_context, meta = context, {}
-            else:
-                effective_context, meta = context_builder(t)
-
-            # Use effective_context to build your prompt, and attach meta if you want.
-            yield GeneratedQuery(query=f"ctx={effective_context}", source_tuple=t, metadata=meta)
-```
-
-## Generator factories (advanced)
-
-If you want direct access to the built-in generators, use the public factories:
-
-```python
-from evaluateur import LLMClient, build_query_generator, build_tuple_generator
-from evaluateur import QueryMode, TupleStrategy
-
-client = LLMClient.from_env()
-tuple_gen = build_tuple_generator(client=client, strategy=TupleStrategy.CROSS_PRODUCT)
-query_gen = build_query_generator(client=client, mode=QueryMode.INSTRUCTOR)
-```
-
-Structured goals:
-
-```python
-import asyncio
-from pydantic import BaseModel, Field
-
-from evaluateur import Evaluator, Goal, GoalSpec
-
-
-class Query(BaseModel):
-    payer: str = Field(..., description="insurance payer, like Cigna")
-    age: str = Field(..., description="patient age category, like 'adult' or 'pediatric'")
-    complexity: str = Field(..., description="complexity bucket, e.g. comorbidities, off-label")
-    geography: str = Field(..., description="geography indicator, like state or zip code")
-
-
-async def main() -> None:
-    evaluator = Evaluator(Query)
-
-    goals = GoalSpec(goals=[
-        Goal(
-            name="freshness checks",
-            text="Queries should ask about effective dates and latest policy versions",
-            category="components",
-        ),
-        Goal(
-            name="grounded claims",
-            text="Queries should request citations and policy section references",
-            category="components",
-        ),
-        Goal(
-            name="conflict integration",
-            text="Test behavior when payer policy conflicts with FDA label",
-            category="trajectories",
-        ),
-        Goal(
-            name="checklist-ready",
-            text="Queries should request structured lists of requirements",
-            category="outcomes",
-        ),
-    ])
-
-    async for q in evaluator.run(
-        goals=goals,
-    ):
-        print(q.metadata.query_goals.model_dump() if q.metadata.query_goals else None)
-        break
-
-
-asyncio.run(main())
-```
-
-Free-form goals (parsed without LLM when structured):
+Pass goals as free-form text. Structured lists with `Components:`,
+`Trajectories:`, and `Outcomes:` headers are parsed directly without an
+LLM call:
 
 ```python
 import asyncio
@@ -267,36 +124,103 @@ from evaluateur import Evaluator
 
 
 class Query(BaseModel):
-    payer: str = Field(...)
-    age: str = Field(...)
-    complexity: str = Field(...)
-    geography: str = Field(...)
+    payer: str = Field(..., description="insurance payer, like Cigna")
+    age: str = Field(..., description="patient age category")
+    complexity: str = Field(..., description="query complexity, like 'off-label'")
+    geography: str = Field(..., description="geography indicator, like a state")
 
 
 async def main() -> None:
     evaluator = Evaluator(Query)
 
-    i = 0
     async for q in evaluator.run(
+        seed=0,
         goals="""
 Components:
-- Prioritize freshness checks and grounded citations
-- Missing-source detection (don't proceed silently)
+- The system must cite current policy versions; stale guidelines are a compliance risk
+- Every clinical claim needs a traceable source from retrieved documents
 
 Trajectories:
-- Conflict handling and recovery behavior
-- Re-try, switch tools, or escalate when evidence conflicts
+- Prefer formulary API over generic web search for drug lists
+- Surface conflicts between sources instead of silently picking one
 
 Outcomes:
-- Produce checklist-ready outputs
-- Easy to review and hard to misuse
+- Produce structured checklists that reviewers can sign off on
+- Flag uncertainty instead of guessing
 """,
+        instructions="Write realistic questions from a doctor's perspective.",
     ):
-        print(q.query)
-        i += 1
-        if i >= 3:
-            break
+        print(f"[{q.metadata.goal_focus}] {q.query}")
 
 
 asyncio.run(main())
 ```
+
+Each generated query targets a single goal by default (cycling through them),
+so one run produces a mix of stress-test styles. You can also pass goals
+as a `GoalSpec` with structured `Goal` objects for programmatic control.
+
+See the [custom goals guide](https://evaluateur.aptford.com/guides/custom-goals/)
+for goal modes (`sample`, `cycle`, `full`) and advanced usage.
+
+## The iteration loop
+
+The core workflow is a feedback loop:
+
+1. **Generate** queries across your dimensions.
+2. **Run** them through your agent and collect traces.
+3. **Analyze** failures -- write freeform notes about what went wrong.
+4. **Turn notes into goals** -- group observations into Components, Trajectories, and Outcomes.
+5. **Generate again** with those goals to stress-test the failure modes you found.
+
+Each cycle tightens coverage. The first round catches obvious failures. By the
+third, you're stress-testing edge cases that real traffic won't hit for months.
+When production traffic arrives, feed those traces back into the loop.
+
+## Features
+
+- **Pydantic-based dimensions.** Define your evaluation space with standard Pydantic models. Field descriptions guide option generation.
+- **Farthest Point Sampling.** When sampling from the cross product, tuples are selected to maximize Hamming distance, ensuring broad coverage instead of clustered combinations.
+- **Seeded, reproducible sampling.** Set `seed=` to get deterministic results. Change the seed for a different subset.
+- **Goal-guided generation.** Bias queries toward specific failure modes using the CTO framework or custom categories.
+- **Async streaming.** All generators yield results as async iterators for memory-efficient processing.
+- **Provider-agnostic.** Works with any LLM provider supported by [Instructor](https://python.useinstructor.com/) -- OpenAI, Anthropic, and others.
+- **Traceability.** Every generated query links back to its source tuple via `q.source_tuple`, making it easy to understand why a query was generated.
+- **Mixed options.** Fixed lists (`state: list[str] = ["CA", "NY", "TX"]`) coexist with LLM-generated options in the same model.
+
+## Configuration
+
+By default, evaluateur reads the `EVALUATEUR_MODEL` environment variable
+(defaults to `openai/gpt-4.1-mini`). You can override this per evaluator:
+
+```python
+from evaluateur import Evaluator
+
+evaluator = Evaluator(Query, llm="anthropic/claude-haiku-4-5")
+```
+
+For advanced setups (observability wrappers, custom providers), pass a
+pre-configured Instructor client directly:
+
+```python
+import instructor
+from openai import AsyncOpenAI
+
+from evaluateur import Evaluator
+
+client = instructor.from_openai(AsyncOpenAI())
+evaluator = Evaluator(Query, client=client, model_name="gpt-4.1-mini")
+```
+
+See the [provider configuration guide](https://evaluateur.aptford.com/guides/provider-configuration/)
+for details.
+
+## Documentation
+
+Full documentation is available at [evaluateur.aptford.com](https://evaluateur.aptford.com).
+
+- [Getting started](https://evaluateur.aptford.com/getting-started/) -- installation and environment setup
+- [Dimensions, tuples, and queries](https://evaluateur.aptford.com/concepts/dimensions-tuples-queries/) -- core concepts
+- [Goal-guided optimization](https://evaluateur.aptford.com/concepts/goal-guided-optimization/) -- the CTO framework
+- [Walkthrough notebook](https://evaluateur.aptford.com/guides/walkthrough/) -- end-to-end example
+- [API reference](https://evaluateur.aptford.com/api/evaluator/) -- full API docs
